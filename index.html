@@ -151,14 +151,10 @@
                     const mapTexture = await textureLoader.loadAsync(mapUrl);
                     mapTexture.encoding = THREE.sRGBEncoding;
 
-                    // --- FIX: APPLY POLYGON OFFSET TO THE MAP TILE MATERIAL TO PREVENT Z-FIGHTING ---
                     const planeMat = new THREE.MeshStandardMaterial({ 
                         map: mapTexture, 
                         roughness: 0.8, 
-                        metalness: 0.2,
-                        polygonOffset: true,
-                        polygonOffsetFactor: -1.0, // A negative factor pushes it away from the camera
-                        polygonOffsetUnits: -1.0
+                        metalness: 0.2
                     });
 
                     const plane = new THREE.Mesh(planeGeom, planeMat);
@@ -175,7 +171,9 @@
                         const u = positions.getX(i) / worldSize + 0.5;
                         const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
                         const height = sampleTerrain(terrainData, u, v);
-                        positions.setZ(i, height);
+                        // --- FIX: Apply height to the Y-axis of the vertex, not the Z-axis ---
+                        // A default PlaneGeometry is in XY. After rotation, its Y becomes world 'up'.
+                        positions.setY(i, height);
                     }
                     positions.needsUpdate = true;
                     planeGeom.computeVertexNormals();
@@ -184,8 +182,6 @@
                 async function loadBuildings() {
                     try {
                         appLoaderText.textContent = 'Loading buildings...';
-                        // Note: You must provide the prague_buildings.geojson file for this to work.
-                        // For testing, this fetch might fail if the file is not in the same directory.
                         const response = await fetch('prague_buildings.geojson');
                         if (!response.ok) throw new Error(`HTTP ${response.status} fetching GeoJSON`);
                         const geojson = await response.json();
