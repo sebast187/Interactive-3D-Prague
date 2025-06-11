@@ -24,7 +24,7 @@
         #loader {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: var(--text-light); font-size: 1.2em; z-index: 100; text-align: center;
-            background-color: rgba(0, 0, 0, 0.7); padding: 20px; border-radius: 8px; width: 90%; max-width: 400px;
+            background-color: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 8px; width: 90%; max-width: 400px;
         }
         .spinner { border: 4px solid rgba(255, 255, 255, 0.2); border-radius: 50%; border-top: 4px solid var(--primary-accent); width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -46,24 +46,35 @@
         </div>
     </div>
     
-    <!-- This is the only script block. It uses modern, reliable module loading from the best CDNs. -->
-    <!-- The `onerror` handler is the ultimate fallback if your network blocks the CDN. -->
-    <script type="module" onerror="document.getElementById('loader-text').textContent='Error: Failed to load core libraries. Please check network connection & disable ad-blockers.'; document.querySelector('.spinner').style.display = 'none';">
+    <!-- LIBRARIES: PASTE THE CODE YOU COPIED INTO THESE SCRIPT TAGS -->
+    
+    <script id="threejs_library">
+        // PASTE THE COPIED CODE FROM three.min.js HERE
 
-        // Import libraries from a reliable, modern CDN designed for ES modules.
-        import * as THREE from 'https://cdn.skypack.dev/three@0.128.0';
-        import { MapControls } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/controls/MapControls.js';
-        import { TWEEN } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/libs/tween.module.min.js';
-
-        // --- THE APPLICATION LOGIC ---
-        // This code will only run if the imports above succeed.
+    </script>
+    <script id="tweenjs_library">
+        // PASTE THE COPIED CODE FROM tween.min.js HERE
         
+    </script>
+    <script id="orbitcontrols_library">
+        // PASTE THE COPIED CODE FROM OrbitControls.js HERE
+        
+    </script>
+    <script id="mapcontrols_library">
+        // PASTE THE COPIED CODE FROM MapControls.js HERE
+        
+    </script>
+
+    <!-- MAIN APPLICATION SCRIPT -->
+    <script>
+    try {
+        // This code now runs *after* all libraries have been successfully defined.
         const destinations = [ { name: "Prague Castle", lat: 50.0901, lon: 14.4005 }, { name: "Charles Bridge", lat: 50.0865, lon: 14.4113 }, { name: "Old Town Square", lat: 50.0874, lon: 14.4208 }, { name: "St. Vitus Cathedral", lat: 50.0909, lon: 14.4007 }, { name: "Astronomical Clock", lat: 50.0870, lon: 14.4208 }, { name: "Vyšehrad", lat: 50.0645, lon: 14.4182 }, { name: "Jewish Quarter (Josefov)", lat: 50.0906, lon: 14.4187 }, { name: "National Museum", lat: 50.0792, lon: 14.4307 }, { name: "Dancing House", lat: 50.0754, lon: 14.4140 }, { name: "Lennon Wall", lat: 50.0862, lon: 14.4072 }, { name: "Petřín Tower", lat: 50.0834, lon: 14.3949 }, { name: "Wenceslas Square", lat: 50.0809, lon: 14.4282 }, { name: "Prague Zoo", lat: 50.1171, lon: 14.4042 }, { name: "Municipal House", lat: 50.0881, lon: 14.4282 }, { name: "National Theatre", lat: 50.0811, lon: 14.4137 }, { name: "Golden Lane", lat: 50.0917, lon: 14.4037 }, { name: "Malá Strana (Lesser Town)", lat: 50.0880, lon: 14.4039 }, { name: "St. Nicholas Church (Malá Strana)", lat: 50.0880, lon: 14.4032 }, { name: "Old Royal Palace", lat: 50.0906, lon: 14.4018 }, { name: "Powder Tower", lat: 50.0873, lon: 14.4277 }, { name: "Museum of Communism", lat: 50.0869, lon: 14.4272 }, { name: "Strahov Monastery", lat: 50.0865, lon: 14.3905 }, { name: "Kampa Island", lat: 50.0847, lon: 14.4092 }, { name: "Church of Our Lady before Týn", lat: 50.0877, lon: 14.4226 }, { name: "Franz Kafka Museum", lat: 50.0878, lon: 14.4103 }, { name: "Letná Park", lat: 50.0955, lon: 14.4157 }, { name: "Clementinum", lat: 50.0865, lon: 14.4158 }, { name: "Rudolfinum", lat: 50.0898, lon: 14.4157 }, { name: "The Vrtba Garden", lat: 50.0871, lon: 14.4032 }, { name: "Speculum Alchemiae", lat: 50.0910, lon: 14.4194 }, { name: "St. George's Basilica", lat: 50.0911, lon: 14.4026 }, { name: "Old Jewish Cemetery", lat: 50.0901, lon: 14.4177 }, { name: "Náplavka Farmers Market", lat: 50.0718, lon: 14.4168 }, { name: "Žižkov Television Tower", lat: 50.0809, lon: 14.4513 }, { name: "Divoká Šárka", lat: 50.1064, lon: 14.3313 }, { name: "Španělská synagoga", lat: 50.0903, lon: 14.4206 }, { name: "Museum Kampa", lat: 50.0837, lon: 14.4087 }, { name: "Troja Palace", lat: 50.1147, lon: 14.4102 }, { name: "Prague Metronome", lat: 50.0946, lon: 14.4156 }, { name: "Henry's Tower (Jindřišská věž)", lat: 50.0842, lon: 14.4299 }, { name: "National Technical Museum", lat: 50.0984, lon: 14.4274 }, { name: "Wallenstein Palace", lat: 50.0904, lon: 14.4079 }, { name: "Infant Jesus of Prague", lat: 50.0865, lon: 14.4034 }, { name: "Slav Epic", lat: 50.0772, lon: 14.4148 }, { name: "Estates Theatre", lat: 50.0858, lon: 14.4230 }, { name: "Loreta Praha", lat: 50.0891, lon: 14.3934 }, { name: "House of the Black Madonna", lat: 50.0867, lon: 14.4258 }, { name: "Bertramka", lat: 50.0734, lon: 14.3965 }, { name: "Cross Club", lat: 50.1054, lon: 14.4690 }, { name: "Prague Planetarium", lat: 50.1042, lon: 14.4300 }];
         let scene, camera, renderer, controls, activeMarker;
         const canvasContainer = document.getElementById('canvas-container'), loader = document.getElementById('loader'), loaderText = document.getElementById('loader-text');
         const MAP_CENTER = { lat: 50.0874, lon: 14.4208 };
         async function loadMapData() { try { const response = await fetch('prague_buildings.geojson'); if (!response.ok) throw new Error(`HTTP ${response.status} fetching GeoJSON`); const data = await response.json(); processGeoJson(data); } catch (error) { loaderText.textContent = `Error: ${error.message}.`; document.querySelector('.spinner').style.display = 'none'; } }
-        function init() { scene = new THREE.Scene(); scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg-dark')); camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth/canvasContainer.clientHeight, 0.1, 5000); camera.position.set(0, 500, 500); renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); renderer.shadowMap.enabled = true; canvasContainer.appendChild(renderer.domElement); controls = new MapControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = 0.05; controls.minDistance = 50; controls.maxDistance = 2000; controls.maxPolarAngle = Math.PI / 2.2; const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); scene.add(ambientLight); const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); directionalLight.position.set(-300, 800, 500); directionalLight.castShadow = true; scene.add(directionalLight); const groundGeo = new THREE.PlaneGeometry(5000, 5000); const groundMat = new THREE.MeshStandardMaterial({ color: getComputedStyle(document.documentElement).getPropertyValue('--ground-color') }); const ground = new THREE.Mesh(groundGeo, groundMat); ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground); populateLocationsList(); loadMapData(); window.addEventListener('resize', onWindowResize, false); animate(); }
+        function init() { scene = new THREE.Scene(); scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg-dark')); camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth/canvasContainer.clientHeight, 0.1, 5000); camera.position.set(0, 500, 500); renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); renderer.shadowMap.enabled = true; canvasContainer.appendChild(renderer.domElement); controls = new THREE.MapControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = 0.05; controls.minDistance = 50; controls.maxDistance = 2000; controls.maxPolarAngle = Math.PI / 2.2; const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); scene.add(ambientLight); const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); directionalLight.position.set(-300, 800, 500); directionalLight.castShadow = true; scene.add(directionalLight); const groundGeo = new THREE.PlaneGeometry(5000, 5000); const groundMat = new THREE.MeshStandardMaterial({ color: getComputedStyle(document.documentElement).getPropertyValue('--ground-color') }); const ground = new THREE.Mesh(groundGeo, groundMat); ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground); populateLocationsList(); loadMapData(); window.addEventListener('resize', onWindowResize, false); animate(); }
         function processGeoJson(geojson) { const buildingMaterial = new THREE.MeshStandardMaterial({ color: getComputedStyle(document.documentElement).getPropertyValue('--building-color'), metalness: 0.3, roughness: 0.6 }); geojson.features.forEach(feature => { if (feature.geometry) addBuilding(feature); }); loader.style.display = 'none'; function addBuilding(feature) { const geomType = feature.geometry.type, coords = feature.geometry.coordinates, properties = feature.properties; let height = properties.height || (properties['building:levels'] ? properties['building:levels'] * 3.5 : 10 + Math.random() * 20); const shapeFromCoords = (polygon) => { const shape = new THREE.Shape(); try { const firstPoint = mercatorProjection(polygon[0][0], polygon[0][1]); shape.moveTo(firstPoint.x, firstPoint.z); for (let i = 1; i < polygon.length; i++) { const point = mercatorProjection(polygon[i][0], polygon[i][1]); shape.lineTo(point.x, point.z); } return shape; } catch (e) { return null; } }; const createMesh = (shape) => { if (!shape) return; const extrudeSettings = { steps: 1, depth: height, bevelEnabled: false }; const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings); const building = new THREE.Mesh(geometry, buildingMaterial); building.castShadow = true; building.receiveShadow = true; scene.add(building); }; if (geomType === 'Polygon') { createMesh(shapeFromCoords(coords[0])); } else if (geomType === 'MultiPolygon') { coords.forEach(polygon => createMesh(shapeFromCoords(polygon[0]))); } } }
         function populateLocationsList() { const list = document.getElementById('locations-list'); destinations.forEach((dest, index) => { const li = document.createElement('li'); li.textContent = dest.name; li.dataset.index = index; li.addEventListener('click', onLocationClick); list.appendChild(li); }); }
         function onLocationClick(event) { document.querySelectorAll('#locations-list li').forEach(item => item.classList.remove('active')); event.target.classList.add('active'); const destination = destinations[event.target.dataset.index]; flyTo(destination); }
@@ -72,7 +83,10 @@
         function onWindowResize() { camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); }
         function animate() { requestAnimationFrame(animate); TWEEN.update(); controls.update(); renderer.render(scene, camera); }
         init();
-
+    } catch (e) {
+        document.getElementById('loader-text').textContent = 'An application error occurred: ' + e.message;
+        document.querySelector('.spinner').style.display = 'none';
+    }
     </script>
 </body>
 </html>
