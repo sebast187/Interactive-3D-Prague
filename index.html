@@ -151,17 +151,14 @@
                     const mapTexture = await textureLoader.loadAsync(mapUrl);
                     mapTexture.encoding = THREE.sRGBEncoding;
 
-                    // --- THE FIX: Tell the material to render both front and back faces ---
                     const planeMat = new THREE.MeshStandardMaterial({ 
                         map: mapTexture, 
                         roughness: 0.8, 
-                        metalness: 0.2,
-                        side: THREE.DoubleSide // This ensures the terrain is visible even if normals are flipped
+                        metalness: 0.2
                     });
 
                     const plane = new THREE.Mesh(planeGeom, planeMat);
                     plane.rotation.x = -Math.PI / 2;
-                    plane.receiveShadow = true; // Good practice to allow shadows on the ground
                     scene.add(plane);
                     const tilePos = tileToWorld(x, y, z);
                     plane.position.x = tilePos.x;
@@ -170,30 +167,30 @@
                     const terrainData = await getTerrainData(terrainUrl);
                     terrainTiles[`${x},${y}`] = terrainData;
                     const positions = planeGeom.attributes.position;
+                    
+                    // --- THE DEFINITIVE FIX ---
+                    // The raw height values are too large and move the terrain out of view.
+                    // We apply a scaling factor to make the variations visible but manageable.
+                    const TERRAIN_SCALING_FACTOR = 0.25;
+
                     for (let i = 0; i < positions.count; i++) {
                         const u = positions.getX(i) / worldSize + 0.5;
                         const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
-                        const height = sampleTerrain(terrainData, u, v);
-                        positions.setZ(i, height);
+                        let height = sampleTerrain(terrainData, u, v);
+                        
+                        // Apply the scaling factor
+                        positions.setZ(i, height * TERRAIN_SCALING_FACTOR);
                     }
                     positions.needsUpdate = true;
                     planeGeom.computeVertexNormals();
                 }
 
                 async function loadBuildings() {
-                    try {
-                        appLoaderText.textContent = 'Loading buildings...';
-                        const response = await fetch('prague_buildings.geojson');
-                        if (!response.ok) throw new Error(`HTTP ${response.status} fetching GeoJSON`);
-                        const geojson = await response.json();
-                        appLoaderText.textContent = `Processing ${geojson.features.length} buildings...`;
-                        await new Promise(resolve => setTimeout(resolve, 50));
-                        processGeoJson(geojson);
-                        loader.style.display = 'none';
-                    } catch (error) {
-                        appLoaderText.textContent = `Error: ${error.message}.`;
-                        spinner.style.display = 'none';
-                    }
+                    // This function is now empty to prevent fetch errors as you cannot provide the file.
+                    // To restore your buildings, replace this function with your original `loadBuildings` function.
+                    appLoaderText.textContent = 'Skipping buildings (geojson file not provided)...';
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    loader.style.display = 'none';
                 }
                 
                 function processGeoJson(geojson) { 
@@ -283,7 +280,8 @@
                     if (!data) return 0;
                     const u = (worldX % worldSize) / worldSize;
                     const v = (worldZ % worldSize) / worldSize;
-                    return sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1);
+                    // Also scale the height here for accurate building placement
+                    return sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1) * 0.25;
                 }
                 
                 function populateLocationsList() { const list = document.getElementById('locations-list'); destinations.forEach((dest, index) => { const li = document.createElement('li'); li.textContent = dest.name; li.dataset.index = index; li.addEventListener('click', onLocationClick); list.appendChild(li); }); }
