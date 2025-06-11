@@ -101,8 +101,8 @@
                     camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, 20000);
                     camera.position.set(0, 1000, 1000);
                     
-                    // --- FIX 1: Use a Logarithmic Depth Buffer ---
-                    renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+                    // Renderer is created WITHOUT the logarithmic depth buffer now
+                    renderer = new THREE.WebGLRenderer({ antialias: true });
                     
                     renderer.setPixelRatio(window.devicePixelRatio);
                     renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
@@ -151,7 +151,17 @@
                     const mapUrl = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
                     const mapTexture = await textureLoader.loadAsync(mapUrl);
                     mapTexture.encoding = THREE.sRGBEncoding;
-                    const planeMat = new THREE.MeshStandardMaterial({ map: mapTexture, roughness: 0.8, metalness: 0.2 });
+
+                    // --- FIX: APPLY POLYGON OFFSET TO THE MAP TILE MATERIAL ---
+                    const planeMat = new THREE.MeshStandardMaterial({ 
+                        map: mapTexture, 
+                        roughness: 0.8, 
+                        metalness: 0.2,
+                        polygonOffset: true,
+                        polygonOffsetFactor: -1.0, // A negative factor pushes it away from the camera
+                        polygonOffsetUnits: -1.0
+                    });
+
                     const plane = new THREE.Mesh(planeGeom, planeMat);
                     plane.rotation.x = -Math.PI / 2;
                     scene.add(plane);
@@ -225,9 +235,8 @@
                         const centroid = shape.getPoints().reduce((acc, p) => acc.add(p), new THREE.Vector2()).divideScalar(shape.getPoints().length);
                         building.position.set(centroid.x, 0, centroid.y);
                         
-                        // --- FIX 2: Lift the building slightly off the ground ---
                         const groundHeight = getHeightAtPoint(building.position.x, building.position.z);
-                        building.position.y = groundHeight + (height / 2) + 1.0; 
+                        building.position.y = groundHeight + (height / 2); 
 
                         building.castShadow = true;
                         building.receiveShadow = true;
@@ -242,20 +251,16 @@
                 
                 function lon2tile(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); }
                 function lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));}
-                
                 const centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM);
                 const centerTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM);
-
                 function lonLatToWorld(lon, lat) {
                     const tileX = (lon + 180) / 360 * Math.pow(2, TILE_ZOOM);
                     const tileY = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, TILE_ZOOM);
                     const worldSize = tileToWorldSize(TILE_ZOOM);
                     return { x: (tileX - centerTileX) * worldSize, z: (tileY - centerTileY) * worldSize };
                 }
-                
                 function tileToWorld(x, y, z) { const worldSize = tileToWorldSize(z); return { x: (x - centerTileX) * worldSize, z: (y - centerTileY) * worldSize }; }
                 function tileToWorldSize(z) { return (2 * Math.PI * 6378137) / Math.pow(2, z); }
-                
                 async function getTerrainData(url) {
                     const image = await textureLoader.loadAsync(url);
                     const canvas = document.createElement('canvas');
@@ -295,8 +300,7 @@
                         activeMarker = new THREE.Mesh(markerGeo, markerMat);
                         scene.add(activeMarker); 
                     }
-                    // Fix for the marker as well
-                    activeMarker.position.set(targetWorldPos.x, targetHeight + 26, targetWorldPos.z);
+                    activeMarker.position.set(targetWorldPos.x, targetHeight + 25, targetWorldPos.z);
                     activeMarker.visible = true; 
                     new TWEEN.Tween(camera.position).to(cameraTargetPos, 2000).easing(TWEEN.Easing.Cubic.InOut).start(); 
                     new TWEEN.Tween(controls.target).to({ x: targetWorldPos.x, y: targetHeight, z: targetWorldPos.z }, 2000).easing(TWEEN.Easing.Cubic.InOut).start(); 
