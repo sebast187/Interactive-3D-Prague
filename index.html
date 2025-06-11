@@ -51,7 +51,7 @@
     </div>
     
     <script>
-        // BOOTLOADER: This ensures all libraries load reliably before the app starts.
+        // BOOTLOADER SCRIPT
         const loaderText = document.getElementById('loader-text');
         const spinner = document.querySelector('.spinner');
         const LIBRARIES = [
@@ -80,42 +80,39 @@
             }
         }
         
-        // This is the entire application. It only runs after bootstrap is complete.
         function startApp() {
             try {
+                // --- FIX: THE DESTINATIONS ARRAY IS NOW HERE ---
+                const destinations = [ { name: "Prague Castle", lat: 50.0901, lon: 14.4005 }, { name: "Charles Bridge", lat: 50.0865, lon: 14.4113 }, { name: "Old Town Square", lat: 50.0874, lon: 14.4208 }, { name: "St. Vitus Cathedral", lat: 50.0909, lon: 14.4007 }, { name: "Astronomical Clock", lat: 50.0870, lon: 14.4208 }, { name: "Vyšehrad", lat: 50.0645, lon: 14.4182 }, { name: "Jewish Quarter (Josefov)", lat: 50.0906, lon: 14.4187 }, { name: "National Museum", lat: 50.0792, lon: 14.4307 }, { name: "Dancing House", lat: 50.0754, lon: 14.4140 }, { name: "Lennon Wall", lat: 50.0862, lon: 14.4072 }, { name: "Petřín Tower", lat: 50.0834, lon: 14.3949 }, { name: "Wenceslas Square", lat: 50.0809, lon: 14.4282 }, { name: "Prague Zoo", lat: 50.1171, lon: 14.4042 }, { name: "Municipal House", lat: 50.0881, lon: 14.4282 }, { name: "National Theatre", lat: 50.0811, lon: 14.4137 }, { name: "Golden Lane", lat: 50.0917, lon: 14.4037 }, { name: "Malá Strana (Lesser Town)", lat: 50.0880, lon: 14.4039 }, { name: "St. Nicholas Church (Malá Strana)", lat: 50.0880, lon: 14.4032 }, { name: "Old Royal Palace", lat: 50.0906, lon: 14.4018 }, { name: "Powder Tower", lat: 50.0873, lon: 14.4277 }, { name: "Museum of Communism", lat: 50.0869, lon: 14.4272 }, { name: "Strahov Monastery", lat: 50.0865, lon: 14.3905 }, { name: "Kampa Island", lat: 50.0847, lon: 14.4092 }, { name: "Church of Our Lady before Týn", lat: 50.0877, lon: 14.4226 }, { name: "Franz Kafka Museum", lat: 50.0878, lon: 14.4103 }, { name: "Letná Park", lat: 50.0955, lon: 14.4157 }, { name: "Clementinum", lat: 50.0865, lon: 14.4158 }, { name: "Rudolfinum", lat: 50.0898, lon: 14.4157 }, { name: "The Vrtba Garden", lat: 50.0871, lon: 14.4032 }, { name: "Speculum Alchemiae", lat: 50.0910, lon: 14.4194 }, { name: "St. George's Basilica", lat: 50.0911, lon: 14.4026 }, { name: "Old Jewish Cemetery", lat: 50.0901, lon: 14.4177 }, { name: "Náplavka Farmers Market", lat: 50.0718, lon: 14.4168 }, { name: "Žižkov Television Tower", lat: 50.0809, lon: 14.4513 }, { name: "Divoká Šárka", lat: 50.1064, lon: 14.3313 }, { name: "Španělská synagoga", lat: 50.0903, lon: 14.4206 }, { name: "Museum Kampa", lat: 50.0837, lon: 14.4087 }, { name: "Troja Palace", lat: 50.1147, lon: 14.4102 }, { name: "Prague Metronome", lat: 50.0946, lon: 14.4156 }, { name: "Henry's Tower (Jindřišská věž)", lat: 50.0842, lon: 14.4299 }, { name: "National Technical Museum", lat: 50.0984, lon: 14.4274 }, { name: "Wallenstein Palace", lat: 50.0904, lon: 14.4079 }, { name: "Infant Jesus of Prague", lat: 50.0865, lon: 14.4034 }, { name: "Slav Epic", lat: 50.0772, lon: 14.4148 }, { name: "Estates Theatre", lat: 50.0858, lon: 14.4230 }, { name: "Loreta Praha", lat: 50.0891, lon: 14.3934 }, { name: "House of the Black Madonna", lat: 50.0867, lon: 14.4258 }, { name: "Bertramka", lat: 50.0734, lon: 14.3965 }, { name: "Cross Club", lat: 50.1054, lon: 14.4690 }, { name: "Prague Planetarium", lat: 50.1042, lon: 14.4300 }];
+
                 // --- CORE CONSTANTS ---
-                const MAP_CENTER = { lat: 50.0874, lon: 14.4208 };
-                const TILE_ZOOM = 16; // Zoom level for tiles. 16-17 is good for cities.
-                const TILE_GRID_SIZE = 7; // Creates a 7x7 grid of tiles. Use odd numbers.
+                const MAP_CENTER_CONFIG = { lat: 50.0874, lon: 14.4208 };
+                const TILE_ZOOM = 16;
+                const TILE_GRID_SIZE = 7;
                 
-                // --- SCENE SETUP ---
                 let scene, camera, renderer, controls, activeMarker;
                 const canvasContainer = document.getElementById('canvas-container');
                 const loader = document.getElementById('loader');
                 const appLoaderText = document.getElementById('loader-text');
                 const textureLoader = new THREE.TextureLoader();
-                const terrainTiles = {}; // To store height data
+                const terrainTiles = {};
 
                 function init() {
                     scene = new THREE.Scene();
                     scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--sky-color'));
-
                     camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, 20000);
                     camera.position.set(0, 1000, 1000);
-
                     renderer = new THREE.WebGLRenderer({ antialias: true });
                     renderer.setPixelRatio(window.devicePixelRatio);
                     renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
                     renderer.shadowMap.enabled = true;
                     canvasContainer.appendChild(renderer.domElement);
-
                     controls = new THREE.OrbitControls(camera, renderer.domElement);
                     controls.enableDamping = true;
                     controls.dampingFactor = 0.05;
                     controls.minDistance = 100;
                     controls.maxDistance = 4000;
                     controls.maxPolarAngle = Math.PI / 2.1;
-
                     const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
                     scene.add(ambientLight);
                     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -124,14 +121,12 @@
                     directionalLight.shadow.mapSize.width = 2048;
                     directionalLight.shadow.mapSize.height = 2048;
                     scene.add(directionalLight);
-
                     populateLocationsList();
                     loadMapAndBuildings();
                     window.addEventListener('resize', onWindowResize, false);
                     animate();
                 }
 
-                // --- CORE LOADING LOGIC ---
                 async function loadMapAndBuildings() {
                     await loadTerrainAndMapTiles();
                     await loadBuildings();
@@ -139,10 +134,9 @@
 
                 async function loadTerrainAndMapTiles() {
                     appLoaderText.textContent = 'Loading terrain & map...';
-                    const centerTileX = lon2tile(MAP_CENTER.lon, TILE_ZOOM);
-                    const centerTileY = lat2tile(MAP_CENTER.lat, TILE_ZOOM);
+                    const centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM);
+                    const centerTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM);
                     const halfGrid = Math.floor(TILE_GRID_SIZE / 2);
-                    
                     const tilePromises = [];
                     for (let i = -halfGrid; i <= halfGrid; i++) {
                         for (let j = -halfGrid; j <= halfGrid; j++) {
@@ -156,34 +150,27 @@
                 
                 async function createTile(x, y, z) {
                     const worldSize = tileToWorldSize(z);
-                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64); // Higher segments for more detail
-
-                    // Load map texture
+                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64);
                     const mapUrl = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
                     const mapTexture = await textureLoader.loadAsync(mapUrl);
                     mapTexture.encoding = THREE.sRGBEncoding;
-
                     const planeMat = new THREE.MeshStandardMaterial({ map: mapTexture, roughness: 0.8, metalness: 0.2 });
                     const plane = new THREE.Mesh(planeGeom, planeMat);
                     plane.rotation.x = -Math.PI / 2;
                     scene.add(plane);
-
-                    // Position the plane correctly in the world
                     const tilePos = tileToWorld(x, y, z);
                     plane.position.x = tilePos.x;
                     plane.position.z = tilePos.z;
-
-                    // Load terrain and apply it
+                    // IMPORTANT: Replace with your own key from maptiler.com for production use
                     const terrainUrl = `https://api.maptiler.com/tiles/terrain-rgb/${z}/${x}/${y}.png?key=get_your_own_D6C245K8p32A3sJa2f58`;
                     const terrainData = await getTerrainData(terrainUrl);
                     terrainTiles[`${x},${y}`] = terrainData;
-
                     const positions = planeGeom.attributes.position;
                     for (let i = 0; i < positions.count; i++) {
                         const u = positions.getX(i) / worldSize + 0.5;
                         const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
                         const height = sampleTerrain(terrainData, u, v);
-                        positions.setZ(i, height); // In local space, Z is up for the plane
+                        positions.setZ(i, height);
                     }
                     positions.needsUpdate = true;
                     planeGeom.computeVertexNormals();
@@ -211,7 +198,6 @@
                         metalness: 0.1,
                         roughness: 0.6
                     });
-                    
                     geojson.features.forEach(feature => { 
                         if (feature.geometry) addBuilding(feature, baseMaterial); 
                     });
@@ -240,16 +226,11 @@
                         if (!shape) return;
                         const extrudeSettings = { steps: 1, depth: height, bevelEnabled: false };
                         const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-                        
-                        // Center the building's geometry so its position is its center
                         geometry.center();
                         const building = new THREE.Mesh(geometry, baseMat);
-
-                        // Find the building's center position and its height on the terrain
                         const centroid = shape.getPoints().reduce((acc, p) => acc.add(p), new THREE.Vector2()).divideScalar(shape.getPoints().length);
                         building.position.set(centroid.x, 0, centroid.y);
                         building.position.y = getHeightAtPoint(building.position.x, building.position.z) + height / 2;
-
                         building.castShadow = true;
                         building.receiveShadow = true;
                         scene.add(building);
@@ -261,39 +242,22 @@
                         coords.forEach(polygon => createMesh(shapeFromCoords(polygon[0])));
                     }
                 }
-
-                // --- COORDINATE AND TERRAIN UTILITIES ---
-                function lon2tile(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); }
-                function lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom)); }
-                function tile2lon(x, z) { return (x / Math.pow(2, z) * 360 - 180); }
-                function tile2lat(y, z) { const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z); return (180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))));}
                 
-                const centerTileX = lon2tile(MAP_CENTER.lon, TILE_ZOOM);
-                const centerTileY = lat2tile(MAP_CENTER.lat, TILE_ZOOM);
+                function lon2tile(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); }
+                function lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));}
+                
+                const centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM);
+                const centerTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM);
 
                 function lonLatToWorld(lon, lat) {
                     const tileX = (lon + 180) / 360 * Math.pow(2, TILE_ZOOM);
                     const tileY = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, TILE_ZOOM);
                     const worldSize = tileToWorldSize(TILE_ZOOM);
-                    return {
-                        x: (tileX - centerTileX) * worldSize,
-                        z: (tileY - centerTileY) * worldSize
-                    };
+                    return { x: (tileX - centerTileX) * worldSize, z: (tileY - centerTileY) * worldSize };
                 }
                 
-                function tileToWorld(x, y, z) {
-                    const worldSize = tileToWorldSize(z);
-                    return {
-                        x: (x - centerTileX) * worldSize,
-                        z: (y - centerTileY) * worldSize
-                    };
-                }
-                
-                function tileToWorldSize(z) {
-                    const R = 6378137; // Earth radius
-                    const Circumference = 2 * Math.PI * R;
-                    return Circumference / Math.pow(2, z);
-                }
+                function tileToWorld(x, y, z) { const worldSize = tileToWorldSize(z); return { x: (x - centerTileX) * worldSize, z: (y - centerTileY) * worldSize }; }
+                function tileToWorldSize(z) { return (2 * Math.PI * 6378137) / Math.pow(2, z); }
                 
                 async function getTerrainData(url) {
                     const image = await textureLoader.loadAsync(url);
@@ -304,50 +268,38 @@
                     context.drawImage(image.image, 0, 0);
                     return context.getImageData(0, 0, canvas.width, canvas.height);
                 }
-
-                function decodeHeight(r, g, b) {
-                    return -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1);
-                }
-                
+                function decodeHeight(r, g, b) { return -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1); }
                 function sampleTerrain(data, u, v) {
                     const x = Math.floor(u * (data.width - 1));
                     const y = Math.floor(v * (data.height - 1));
                     const i = (y * data.width + x) * 4;
                     return decodeHeight(data.data[i], data.data[i+1], data.data[i+2]);
                 }
-
                 function getHeightAtPoint(worldX, worldZ) {
                     const worldSize = tileToWorldSize(TILE_ZOOM);
                     const tileX = Math.floor(worldX / worldSize) + centerTileX;
                     const tileY = Math.floor(worldZ / worldSize) + centerTileY;
-
                     const data = terrainTiles[`${tileX},${tileY}`];
-                    if (!data) return 0; // If tile data isn't loaded, return flat ground
-
+                    if (!data) return 0;
                     const u = (worldX % worldSize) / worldSize;
                     const v = (worldZ % worldSize) / worldSize;
                     return sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1);
                 }
                 
-                // --- UI & ANIMATION FUNCTIONS ---
                 function populateLocationsList() { const list = document.getElementById('locations-list'); destinations.forEach((dest, index) => { const li = document.createElement('li'); li.textContent = dest.name; li.dataset.index = index; li.addEventListener('click', onLocationClick); list.appendChild(li); }); }
                 function onLocationClick(event) { document.querySelectorAll('#locations-list li').forEach(item => item.classList.remove('active')); event.target.classList.add('active'); const destination = destinations[event.target.dataset.index]; flyTo(destination); }
                 function flyTo(destination) {
                     const targetWorldPos = lonLatToWorld(destination.lon, destination.lat);
                     const targetHeight = getHeightAtPoint(targetWorldPos.x, targetWorldPos.z);
-
                     const cameraTargetPos = { x: targetWorldPos.x, y: targetHeight + 400, z: targetWorldPos.z + 600 };
-                    
                     if (!activeMarker) { 
                         const markerGeo = new THREE.CylinderGeometry(15, 0, 50, 8); 
                         const markerMat = new THREE.MeshStandardMaterial({ color: getComputedStyle(document.documentElement).getPropertyValue('--primary-accent'), emissive: getComputedStyle(document.documentElement).getPropertyValue('--primary-accent'), emissiveIntensity: 0.5 }); 
                         activeMarker = new THREE.Mesh(markerGeo, markerMat);
                         scene.add(activeMarker); 
                     }
-                    
                     activeMarker.position.set(targetWorldPos.x, targetHeight + 25, targetWorldPos.z);
                     activeMarker.visible = true; 
-                    
                     new TWEEN.Tween(camera.position).to(cameraTargetPos, 2000).easing(TWEEN.Easing.Cubic.InOut).start(); 
                     new TWEEN.Tween(controls.target).to({ x: targetWorldPos.x, y: targetHeight, z: targetWorldPos.z }, 2000).easing(TWEEN.Easing.Cubic.InOut).start(); 
                 }
@@ -355,11 +307,9 @@
                 function animate() { requestAnimationFrame(animate); TWEEN.update(); controls.update(); renderer.render(scene, camera); }
                 
                 init();
-
             } catch (e) {
                 document.getElementById('loader-text').textContent = 'An application error occurred: ' + e.message;
                 spinner.style.display = 'none';
-                console.error(e);
             }
         }
         bootstrap();
