@@ -316,7 +316,7 @@
                 const data = await response.json();
                 processGeoJson(data);
             } catch (error) {
-                loader.textContent = 'Error: Could not load prague_buildings.geojson. Please ensure the file exists and is in the same directory.';
+                loader.textContent = 'Error: Could not load map data. Check the developer console (F12) for details. Message: ' + error.message;
                 console.error('Failed to load map data:', error);
             }
         }
