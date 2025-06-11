@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Interactive 3D Prague</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --sidebar-bg: #1e1e1e;
+            --primary-accent: #e94560;
+            --text-light: #f0f0f0;
+            --text-muted: #a0a0a0;
+            --ground-color: #2a2a2a;
+            --building-color: #555555;
+            --building-highlight: #e94560;
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            /* Use dynamic viewport height for mobile browsers like Safari */
+            height: 100dvh;
+            overflow: hidden;
+            font-family: var(--font-main);
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+        }
+
+        #app-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        #sidebar {
+            width: 300px;
+            flex-shrink: 0;
+            background-color: var(--sidebar-bg);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 15px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+        
+        #sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        #sidebar-header h1 {
+            color: var(--primary-accent);
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+        
+        #sidebar-header p {
+             color: var(--text-muted);
+             font-size: 0.9em;
+        }
+
+        #locations-list {
+            list-style: none;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        #locations-list li {
+            padding: 15px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #333;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            color: var(--text-light);
+        }
+
+        #locations-list li:hover {
+            background-color: var(--primary-accent);
+            color: white;
+        }
+
+        #locations-list li.active {
+            background-color: var(--primary-accent);
+            color: white;
+            font-weight: bold;
+        }
+
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--text-light);
+            font-size: 1.2em;
+            z-index: 100;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            border-top: 4px solid var(--primary-accent);
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+            #app-container {
+                flex-direction: column;
+            }
+            #sidebar {
+                width: 100%;
+                height: 40%; /* Take 40% of the screen height */
+                flex-shrink: 1;
+            }
+            #canvas-container {
+                height: 60%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <div id="sidebar">
+            <div id="sidebar-header">
+                <h1>Prague Sights</h1>
+                <p>Select a destination to explore</p>
+            </div>
+            <ul id="locations-list"></ul>
+        </div>
+        <div id="canvas-container">
+            <div id="loader">
+                <div class="spinner"></div>
+                Loading 3D Map...
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+        import { MapControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/MapControls.js';
+        import { TWEEN } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/tween.module.min.js';
+
+        // --- DATA: Top Tourist Destinations ---
+        const destinations = [
+            { name: "Prague Castle", lat: 50.0901, lon: 14.4005 },
+            { name: "Charles Bridge", lat: 50.0865, lon: 14.4113 },
+            { name: "Old Town Square", lat: 50.0874, lon: 14.4208 },
+            { name: "St. Vitus Cathedral", lat: 50.0909, lon: 14.4007 },
+            { name: "Astronomical Clock", lat: 50.0870, lon: 14.4208 },
+            { name: "Vyšehrad", lat: 50.0645, lon: 14.4182 },
+            { name: "Jewish Quarter (Josefov)", lat: 50.0906, lon: 14.4187 },
+            { name: "National Museum", lat: 50.0792, lon: 14.4307 },
+            { name: "Dancing House", lat: 50.0754, lon: 14.4140 },
+            { name: "Lennon Wall", lat: 50.0862, lon: 14.4072 },
+            { name: "Petřín Tower", lat: 50.0834, lon: 14.3949 },
+            { name: "Wenceslas Square", lat: 50.0809, lon: 14.4282 },
+            { name: "Prague Zoo", lat: 50.1171, lon: 14.4042 },
+            { name: "Municipal House", lat: 50.0881, lon: 14.4282 },
+            { name: "National Theatre", lat: 50.0811, lon: 14.4137 },
+            { name: "Golden Lane", lat: 50.0917, lon: 14.4037 },
+            { name: "Malá Strana (Lesser Town)", lat: 50.0880, lon: 14.4039 },
+            { name: "St. Nicholas Church (Malá Strana)", lat: 50.0880, lon: 14.4032 },
+            { name: "Old Royal Palace", lat: 50.0906, lon: 14.4018 },
+            { name: "Powder Tower", lat: 50.0873, lon: 14.4277 },
+            { name: "Museum of Communism", lat: 50.0869, lon: 14.4272 },
+            { name: "Strahov Monastery", lat: 50.0865, lon: 14.3905 },
+            { name: "Kampa Island", lat: 50.0847, lon: 14.4092 },
+            { name: "Church of Our Lady before Týn", lat: 50.0877, lon: 14.4226 },
+            { name: "Franz Kafka Museum", lat: 50.0878, lon: 14.4103 },
+            { name: "Letná Park", lat: 50.0955, lon: 14.4157 },
+            { name: "Clementinum", lat: 50.0865, lon: 14.4158 },
+            { name: "Rudolfinum", lat: 50.0898, lon: 14.4157 },
+            { name: "The Vrtba Garden", lat: 50.0871, lon: 14.4032 },
+            { name: "Speculum Alchemiae", lat: 50.0910, lon: 14.4194 },
+            { name: "St. George's Basilica", lat: 50.0911, lon: 14.4026 },
+            { name: "Old Jewish Cemetery", lat: 50.0901, lon: 14.4177 },
+            { name: "Náplavka Farmers Market", lat: 50.0718, lon: 14.4168 },
+            { name: "Žižkov Television Tower", lat: 50.0809, lon: 14.4513 },
+            { name: "Divoká Šárka", lat: 50.1064, lon: 14.3313 },
+            { name: "Španělská synagoga", lat: 50.0903, lon: 14.4206 },
+            { name: "Museum Kampa", lat: 50.0837, lon: 14.4087 },
+            { name: "Troja Palace", lat: 50.1147, lon: 14.4102 },
+            { name: "Prague Metronome", lat: 50.0946, lon: 14.4156 },
+            { name: "Henry's Tower (Jindřišská věž)", lat: 50.0842, lon: 14.4299 },
+            { name: "National Technical Museum", lat: 50.0984, lon: 14.4274 },
+            { name: "Wallenstein Palace", lat: 50.0904, lon: 14.4079 },
+            { name: "Infant Jesus of Prague", lat: 50.0865, lon: 14.4034 },
+            { name: "Slav Epic", lat: 50.0772, lon: 14.4148 },
+            { name: "Estates Theatre", lat: 50.0858, lon: 14.4230 },
+            { name: "Loreta Praha", lat: 50.0891, lon: 14.3934 },
+            { name: "House of the Black Madonna", lat: 50.0867, lon: 14.4258 },
+            { name: "Bertramka", lat: 50.0734, lon: 14.3965 },
+            { name: "Cross Club", lat: 50.1054, lon: 14.4690 },
+            { name: "Prague Planetarium", lat: 50.1042, lon: 14.4300 },
+        ];
+        
+        // --- 3D SCENE SETUP ---
+        let scene, camera, renderer, controls;
+        let activeMarker;
+        const canvasContainer = document.getElementById('canvas-container');
+        const loader = document.getElementById('loader');
+        
+        // Use a central point in Prague as the origin for our coordinate system
+        const MAP_CENTER = { lat: 50.0874, lon: 14.4208 };
+
+        // --- CORE FUNCTIONS ---
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg-dark'));
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 5000);
+            camera.position.set(0, 500, 500);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            canvasContainer.appendChild(renderer.domElement);
+
+            // Controls
+            controls = new MapControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 50;
+            controls.maxDistance = 2000;
+            controls.maxPolarAngle = Math.PI / 2.2; // Don't let user go below horizon
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(-300, 800, 500);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.left = -1500;
+            directionalLight.shadow.camera.right = 1500;
+            directionalLight.shadow.camera.top = 1500;
+            directionalLight.shadow.camera.bottom = -1500;
+            scene.add(directionalLight);
+            
+            // Ground Plane
+            const groundGeo = new THREE.PlaneGeometry(5000, 5000);
+            const groundMat = new THREE.MeshStandardMaterial({ color: getComputedStyle(document.documentElement).getPropertyValue('--ground-color') });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Active Location Marker
+            const markerGeo = new THREE.CylinderGeometry(8, 0, 30, 8);
+            const markerMat = new THREE.MeshStandardMaterial({ color: getComputedStyle(document.documentElement).getPropertyValue('--primary-accent'), emissive: getComputedStyle(document.documentElement).getPropertyValue('--primary-accent'), emissiveIntensity: 0.5 });
+            activeMarker = new THREE.Mesh(markerGeo, markerMat);
+            activeMarker.position.y = 15;
+            activeMarker.visible = false;
+            scene.add(activeMarker);
+
+            // Populate list and load map data
+            populateLocationsList();
+            loadMapData();
+            
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize, false);
+
+            animate();
+        }
+        
+        function onWindowResize() {
+            // This properly handles mobile resizes, including Safari's dynamic toolbars
+            camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- DATA PROCESSING & MAP GENERATION ---
+
+        async function loadMapData() {
+            try {
+                const response = await fetch('prague_buildings.geojson');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                processGeoJson(data);
+            } catch (error) {
+                loader.textContent = 'Error: Could not load prague_buildings.geojson. Please ensure the file exists and is in the same directory.';
+                console.error('Failed to load map data:', error);
+            }
+        }
+        
+        function processGeoJson(geojson) {
+            const buildingMaterial = new THREE.MeshStandardMaterial({
+                color: getComputedStyle(document.documentElement).getPropertyValue('--building-color'),
+                metalness: 0.3,
+                roughness: 0.6
+            });
+
+            for (const feature of geojson.features) {
+                if (!feature.geometry) continue;
+
+                const geomType = feature.geometry.type;
+                const coords = feature.geometry.coordinates;
+
+                if (geomType === 'Polygon') {
+                    addBuilding(coords, feature.properties, buildingMaterial);
+                } else if (geomType === 'MultiPolygon') {
+                    coords.forEach(polygonCoords => {
+                        addBuilding(polygonCoords, feature.properties, buildingMaterial);
+                    });
+                }
+            }
+            loader.style.display = 'none'; // Hide loader when done
+        }
+
+        function addBuilding(coords, properties, material) {
+            // Default height + some randomness for visual variety
+            let height = properties.height || (properties['building:levels'] ? properties['building:levels'] * 3.5 : 10 + Math.random() * 20);
+
+            const shape = new THREE.Shape();
+            const firstPoint = mercatorProjection(coords[0][0][0], coords[0][0][1]);
+            shape.moveTo(firstPoint.x, firstPoint.z);
+
+            for (let i = 1; i < coords[0].length; i++) {
+                const point = mercatorProjection(coords[0][i][0], coords[0][i][1]);
+                shape.lineTo(point.x, point.z);
+            }
+
+            const extrudeSettings = {
+                steps: 1,
+                depth: height,
+                bevelEnabled: false
+            };
+
+            const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            const building = new THREE.Mesh(geometry, material);
+            building.position.y = 0; // The base is on the ground plane
+            building.castShadow = true;
+            building.receiveShadow = true;
+            scene.add(building);
+        }
+
+        // --- UI & NAVIGATION ---
+
+        function populateLocationsList() {
+            const list = document.getElementById('locations-list');
+            destinations.forEach((dest, index) => {
+                const li = document.createElement('li');
+                li.textContent = dest.name;
+                li.dataset.index = index;
+                li.addEventListener('click', onLocationClick);
+                list.appendChild(li);
+            });
+        }
+        
+        function onLocationClick(event) {
+            const listItems = document.querySelectorAll('#locations-list li');
+            listItems.forEach(item => item.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const index = event.target.dataset.index;
+            const destination = destinations[index];
+            flyTo(destination);
+        }
+        
+        function flyTo(destination) {
+            const targetPos = mercatorProjection(destination.lon, destination.lat);
+            const cameraTargetPos = { x: targetPos.x, y: 200, z: targetPos.z + 300 };
+            
+            activeMarker.position.x = targetPos.x;
+            activeMarker.position.z = targetPos.z;
+            activeMarker.visible = true;
+
+            // Animate camera position
+            new TWEEN.Tween(camera.position)
+                .to(cameraTargetPos, 2000) // 2 second animation
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .start();
+
+            // Animate controls target (the point camera looks at)
+            new TWEEN.Tween(controls.target)
+                .to({ x: targetPos.x, y: 0, z: targetPos.z }, 2000)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .start();
+        }
+
+        // --- UTILITIES ---
+
+        function mercatorProjection(lon, lat) {
+            // Convert lon/lat to a 2D plane, scaled for our scene
+            const R = 6378137; // Earth radius in meters
+            const scale = 0.5; // Adjust this to fit your scene size
+            
+            const x = R * (lon * Math.PI / 180 - MAP_CENTER.lon * Math.PI / 180) * scale;
+            const y = R * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2)) * scale;
+            const center_y = R * Math.log(Math.tan(Math.PI / 4 + (MAP_CENTER.lat * Math.PI / 180) / 2)) * scale;
+
+            // In Three.js, Y is up, so we map our projected Y to Z
+            return { x: x, z: -(y - center_y) };
+        }
+        
+        // --- START THE APP ---
+        init();
+
+    </script>
+</body>
+</html>
