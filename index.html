@@ -82,10 +82,8 @@
         
         function startApp() {
             try {
-                // --- FIX: THE DESTINATIONS ARRAY IS NOW HERE ---
                 const destinations = [ { name: "Prague Castle", lat: 50.0901, lon: 14.4005 }, { name: "Charles Bridge", lat: 50.0865, lon: 14.4113 }, { name: "Old Town Square", lat: 50.0874, lon: 14.4208 }, { name: "St. Vitus Cathedral", lat: 50.0909, lon: 14.4007 }, { name: "Astronomical Clock", lat: 50.0870, lon: 14.4208 }, { name: "Vyšehrad", lat: 50.0645, lon: 14.4182 }, { name: "Jewish Quarter (Josefov)", lat: 50.0906, lon: 14.4187 }, { name: "National Museum", lat: 50.0792, lon: 14.4307 }, { name: "Dancing House", lat: 50.0754, lon: 14.4140 }, { name: "Lennon Wall", lat: 50.0862, lon: 14.4072 }, { name: "Petřín Tower", lat: 50.0834, lon: 14.3949 }, { name: "Wenceslas Square", lat: 50.0809, lon: 14.4282 }, { name: "Prague Zoo", lat: 50.1171, lon: 14.4042 }, { name: "Municipal House", lat: 50.0881, lon: 14.4282 }, { name: "National Theatre", lat: 50.0811, lon: 14.4137 }, { name: "Golden Lane", lat: 50.0917, lon: 14.4037 }, { name: "Malá Strana (Lesser Town)", lat: 50.0880, lon: 14.4039 }, { name: "St. Nicholas Church (Malá Strana)", lat: 50.0880, lon: 14.4032 }, { name: "Old Royal Palace", lat: 50.0906, lon: 14.4018 }, { name: "Powder Tower", lat: 50.0873, lon: 14.4277 }, { name: "Museum of Communism", lat: 50.0869, lon: 14.4272 }, { name: "Strahov Monastery", lat: 50.0865, lon: 14.3905 }, { name: "Kampa Island", lat: 50.0847, lon: 14.4092 }, { name: "Church of Our Lady before Týn", lat: 50.0877, lon: 14.4226 }, { name: "Franz Kafka Museum", lat: 50.0878, lon: 14.4103 }, { name: "Letná Park", lat: 50.0955, lon: 14.4157 }, { name: "Clementinum", lat: 50.0865, lon: 14.4158 }, { name: "Rudolfinum", lat: 50.0898, lon: 14.4157 }, { name: "The Vrtba Garden", lat: 50.0871, lon: 14.4032 }, { name: "Speculum Alchemiae", lat: 50.0910, lon: 14.4194 }, { name: "St. George's Basilica", lat: 50.0911, lon: 14.4026 }, { name: "Old Jewish Cemetery", lat: 50.0901, lon: 14.4177 }, { name: "Náplavka Farmers Market", lat: 50.0718, lon: 14.4168 }, { name: "Žižkov Television Tower", lat: 50.0809, lon: 14.4513 }, { name: "Divoká Šárka", lat: 50.1064, lon: 14.3313 }, { name: "Španělská synagoga", lat: 50.0903, lon: 14.4206 }, { name: "Museum Kampa", lat: 50.0837, lon: 14.4087 }, { name: "Troja Palace", lat: 50.1147, lon: 14.4102 }, { name: "Prague Metronome", lat: 50.0946, lon: 14.4156 }, { name: "Henry's Tower (Jindřišská věž)", lat: 50.0842, lon: 14.4299 }, { name: "National Technical Museum", lat: 50.0984, lon: 14.4274 }, { name: "Wallenstein Palace", lat: 50.0904, lon: 14.4079 }, { name: "Infant Jesus of Prague", lat: 50.0865, lon: 14.4034 }, { name: "Slav Epic", lat: 50.0772, lon: 14.4148 }, { name: "Estates Theatre", lat: 50.0858, lon: 14.4230 }, { name: "Loreta Praha", lat: 50.0891, lon: 14.3934 }, { name: "House of the Black Madonna", lat: 50.0867, lon: 14.4258 }, { name: "Bertramka", lat: 50.0734, lon: 14.3965 }, { name: "Cross Club", lat: 50.1054, lon: 14.4690 }, { name: "Prague Planetarium", lat: 50.1042, lon: 14.4300 }];
-
-                // --- CORE CONSTANTS ---
+                
                 const MAP_CENTER_CONFIG = { lat: 50.0874, lon: 14.4208 };
                 const TILE_ZOOM = 16;
                 const TILE_GRID_SIZE = 7;
@@ -102,7 +100,10 @@
                     scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--sky-color'));
                     camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, 20000);
                     camera.position.set(0, 1000, 1000);
-                    renderer = new THREE.WebGLRenderer({ antialias: true });
+                    
+                    // --- FIX 1: Use a Logarithmic Depth Buffer ---
+                    renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+                    
                     renderer.setPixelRatio(window.devicePixelRatio);
                     renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
                     renderer.shadowMap.enabled = true;
@@ -127,11 +128,7 @@
                     animate();
                 }
 
-                async function loadMapAndBuildings() {
-                    await loadTerrainAndMapTiles();
-                    await loadBuildings();
-                }
-
+                async function loadMapAndBuildings() { await loadTerrainAndMapTiles(); await loadBuildings(); }
                 async function loadTerrainAndMapTiles() {
                     appLoaderText.textContent = 'Loading terrain & map...';
                     const centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM);
@@ -161,7 +158,6 @@
                     const tilePos = tileToWorld(x, y, z);
                     plane.position.x = tilePos.x;
                     plane.position.z = tilePos.z;
-                    // IMPORTANT: Replace with your own key from maptiler.com for production use
                     const terrainUrl = `https://api.maptiler.com/tiles/terrain-rgb/${z}/${x}/${y}.png?key=get_your_own_D6C245K8p32A3sJa2f58`;
                     const terrainData = await getTerrainData(terrainUrl);
                     terrainTiles[`${x},${y}`] = terrainData;
@@ -208,7 +204,6 @@
                     const coords = feature.geometry.coordinates;
                     const properties = feature.properties;
                     let height = properties.height || (properties['building:levels'] ? properties['building:levels'] * 3.5 : 10 + Math.random() * 20);
-
                     const shapeFromCoords = (polygon) => {
                         const shape = new THREE.Shape();
                         try {
@@ -221,7 +216,6 @@
                             return shape;
                         } catch (e) { return null; }
                     };
-
                     const createMesh = (shape) => {
                         if (!shape) return;
                         const extrudeSettings = { steps: 1, depth: height, bevelEnabled: false };
@@ -230,12 +224,15 @@
                         const building = new THREE.Mesh(geometry, baseMat);
                         const centroid = shape.getPoints().reduce((acc, p) => acc.add(p), new THREE.Vector2()).divideScalar(shape.getPoints().length);
                         building.position.set(centroid.x, 0, centroid.y);
-                        building.position.y = getHeightAtPoint(building.position.x, building.position.z) + height / 2;
+                        
+                        // --- FIX 2: Lift the building slightly off the ground ---
+                        const groundHeight = getHeightAtPoint(building.position.x, building.position.z);
+                        building.position.y = groundHeight + (height / 2) + 1.0; 
+
                         building.castShadow = true;
                         building.receiveShadow = true;
                         scene.add(building);
                     };
-
                     if (geomType === 'Polygon') {
                         createMesh(shapeFromCoords(coords[0]));
                     } else if (geomType === 'MultiPolygon') {
@@ -298,7 +295,8 @@
                         activeMarker = new THREE.Mesh(markerGeo, markerMat);
                         scene.add(activeMarker); 
                     }
-                    activeMarker.position.set(targetWorldPos.x, targetHeight + 25, targetWorldPos.z);
+                    // Fix for the marker as well
+                    activeMarker.position.set(targetWorldPos.x, targetHeight + 26, targetWorldPos.z);
                     activeMarker.visible = true; 
                     new TWEEN.Tween(camera.position).to(cameraTargetPos, 2000).easing(TWEEN.Easing.Cubic.InOut).start(); 
                     new TWEEN.Tween(controls.target).to({ x: targetWorldPos.x, y: targetHeight, z: targetWorldPos.z }, 2000).easing(TWEEN.Easing.Cubic.InOut).start(); 
