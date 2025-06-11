@@ -87,6 +87,8 @@
                 const MAP_CENTER_CONFIG = { lat: 50.0874, lon: 14.4208 };
                 const TILE_ZOOM = 16;
                 const TILE_GRID_SIZE = 7;
+                // --- FIX: Define a base altitude to subtract, centering the terrain at Y=0 ---
+                const TERRAIN_BASE_ALTITUDE = 235; // Approx average altitude of Prague
                 
                 let scene, camera, renderer, controls, activeMarker;
                 const canvasContainer = document.getElementById('canvas-container');
@@ -167,30 +169,33 @@
                     const terrainData = await getTerrainData(terrainUrl);
                     terrainTiles[`${x},${y}`] = terrainData;
                     const positions = planeGeom.attributes.position;
-                    
-                    // --- THE DEFINITIVE FIX ---
-                    // The raw height values are too large and move the terrain out of view.
-                    // We apply a scaling factor to make the variations visible but manageable.
-                    const TERRAIN_SCALING_FACTOR = 0.25;
-
                     for (let i = 0; i < positions.count; i++) {
                         const u = positions.getX(i) / worldSize + 0.5;
                         const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
-                        let height = sampleTerrain(terrainData, u, v);
-                        
-                        // Apply the scaling factor
-                        positions.setZ(i, height * TERRAIN_SCALING_FACTOR);
+                        const height = sampleTerrain(terrainData, u, v);
+                        // --- FIX 1/2: Subtract the base altitude to center the terrain at Y=0 ---
+                        positions.setZ(i, height - TERRAIN_BASE_ALTITUDE);
                     }
                     positions.needsUpdate = true;
                     planeGeom.computeVertexNormals();
                 }
 
                 async function loadBuildings() {
-                    // This function is now empty to prevent fetch errors as you cannot provide the file.
-                    // To restore your buildings, replace this function with your original `loadBuildings` function.
-                    appLoaderText.textContent = 'Skipping buildings (geojson file not provided)...';
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    loader.style.display = 'none';
+                    try {
+                        appLoaderText.textContent = 'Loading buildings...';
+                        const response = await fetch('prague_buildings.geojson');
+                        if (!response.ok) throw new Error(`HTTP ${response.status} fetching GeoJSON`);
+                        const geojson = await response.json();
+                        appLoaderText.textContent = `Processing ${geojson.features.length} buildings...`;
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                        processGeoJson(geojson);
+                        loader.style.display = 'none';
+                    } catch (error) {
+                        // This makes the app runnable even if the geojson file is missing
+                        appLoaderText.textContent = `Buildings could not be loaded: ${error.message}.`;
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        loader.style.display = 'none';
+                    }
                 }
                 
                 function processGeoJson(geojson) { 
@@ -280,8 +285,9 @@
                     if (!data) return 0;
                     const u = (worldX % worldSize) / worldSize;
                     const v = (worldZ % worldSize) / worldSize;
-                    // Also scale the height here for accurate building placement
-                    return sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1) * 0.25;
+                    const height = sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1);
+                    // --- FIX 2/2: Subtract the same base altitude here to place buildings correctly ---
+                    return height - TERRAIN_BASE_ALTITUDE;
                 }
                 
                 function populateLocationsList() { const list = document.getElementById('locations-list'); destinations.forEach((dest, index) => { const li = document.createElement('li'); li.textContent = dest.name; li.dataset.index = index; li.addEventListener('click', onLocationClick); list.appendChild(li); }); }
