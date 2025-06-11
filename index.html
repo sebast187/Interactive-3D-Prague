@@ -154,15 +154,19 @@
                     const planeMat = new THREE.MeshStandardMaterial({ 
                         map: mapTexture, 
                         roughness: 0.8, 
-                        metalness: 0.2
+                        metalness: 0.2,
                     });
 
                     const plane = new THREE.Mesh(planeGeom, planeMat);
                     plane.rotation.x = -Math.PI / 2;
+                    plane.receiveShadow = true; // Added for better visuals
                     scene.add(plane);
                     const tilePos = tileToWorld(x, y, z);
                     plane.position.x = tilePos.x;
                     plane.position.z = tilePos.z;
+
+                    // --- DEBUGGING STEP: Temporarily disable all height modification ---
+                    /*
                     const terrainUrl = `https://api.maptiler.com/tiles/terrain-rgb/${z}/${x}/${y}.png?key=get_your_own_D6C245K8p32A3sJa2f58`;
                     const terrainData = await getTerrainData(terrainUrl);
                     terrainTiles[`${x},${y}`] = terrainData;
@@ -171,11 +175,11 @@
                         const u = positions.getX(i) / worldSize + 0.5;
                         const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
                         const height = sampleTerrain(terrainData, u, v);
-                        // --- THE FIX: Negate the height to flip the terrain right-side up after rotation ---
-                        positions.setZ(i, -height);
+                        positions.setZ(i, height);
                     }
                     positions.needsUpdate = true;
                     planeGeom.computeVertexNormals();
+                    */
                 }
 
                 async function loadBuildings() {
@@ -274,6 +278,10 @@
                     return decodeHeight(data.data[i], data.data[i+1], data.data[i+2]);
                 }
                 function getHeightAtPoint(worldX, worldZ) {
+                    // With heightmap disabled, we return 0 for building placement
+                    return 0;
+
+                    /* PREVIOUS LOGIC (will be restored)
                     const worldSize = tileToWorldSize(TILE_ZOOM);
                     const tileX = Math.floor(worldX / worldSize) + centerTileX;
                     const tileY = Math.floor(worldZ / worldSize) + centerTileY;
@@ -282,12 +290,13 @@
                     const u = (worldX % worldSize) / worldSize;
                     const v = (worldZ % worldSize) / worldSize;
                     return sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1);
+                    */
                 }
                 
                 function populateLocationsList() { const list = document.getElementById('locations-list'); destinations.forEach((dest, index) => { const li = document.createElement('li'); li.textContent = dest.name; li.dataset.index = index; li.addEventListener('click', onLocationClick); list.appendChild(li); }); }
                 function onLocationClick(event) { document.querySelectorAll('#locations-list li').forEach(item => item.classList.remove('active')); event.target.classList.add('active'); const destination = destinations[event.target.dataset.index]; flyTo(destination); }
                 function flyTo(destination) {
-                    const targetWorldPos = lonLatToWorld(destination.lon, destination.lat);
+                    const targetWorldPos = lonLatToWorld(.lon, destination.lat);
                     const targetHeight = getHeightAtPoint(targetWorldPos.x, targetWorldPos.z);
                     const cameraTargetPos = { x: targetWorldPos.x, y: targetHeight + 400, z: targetWorldPos.z + 600 };
                     if (!activeMarker) { 
