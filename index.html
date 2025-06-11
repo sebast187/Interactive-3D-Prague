@@ -35,7 +35,6 @@
         .spinner { border: 4px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top: 4px solid var(--primary-accent); width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* --- NEW: ERROR CONSOLE STYLES --- */
         #error-console {
             position: fixed;
             bottom: 0;
@@ -94,7 +93,6 @@
         </div>
     </div>
 
-    <!-- --- NEW: ERROR CONSOLE HTML --- -->
     <div id="error-console">
         <div id="error-header">
             <span>JavaScript Console</span>
@@ -104,7 +102,6 @@
     </div>
     
     <script>
-        // --- NEW: ERROR CONSOLE SCRIPT ---
         const errorConsole = document.getElementById('error-console');
         const errorLog = document.getElementById('error-log');
         const errorHeader = document.getElementById('error-header');
@@ -128,16 +125,15 @@
             entry.classList.add(type);
             entry.textContent = `> ${message}`;
             errorLog.appendChild(entry);
-            errorLog.scrollTop = errorLog.scrollHeight; // Auto-scroll
+            errorLog.scrollTop = errorLog.scrollHeight; 
         }
 
         window.onerror = function(message, source, lineno, colno, error) {
             const errorMsg = `${message} (at ${source.split('/').pop()}:${lineno}:${colno})`;
             logToScreen(errorMsg, 'error');
-            return true; // Prevents the default browser error handling
+            return true;
         };
 
-        // BOOTLOADER SCRIPT
         const loaderText = document.getElementById('loader-text');
         const spinner = document.querySelector('.spinner');
         const LIBRARIES = [
@@ -236,7 +232,12 @@
                 
                 async function createTile(x, y, z) {
                     const worldSize = tileToWorldSize(z);
+                    // --- FIX: LOGIC RESTRUCTURED ---
+                    // 1. Create the geometry in the default XY orientation.
                     const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64);
+                    // 2. Rotate the GEOMETRY vertices to lie on the XZ plane.
+                    planeGeom.rotateX(-Math.PI / 2);
+
                     const mapUrl = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
                     const mapTexture = await textureLoader.loadAsync(mapUrl);
                     mapTexture.encoding = THREE.sRGBEncoding;
@@ -244,29 +245,34 @@
                     const planeMat = new THREE.MeshStandardMaterial({ 
                         map: mapTexture, 
                         roughness: 0.8, 
-                        metalness: 0.2,
-                        // --- FIX: RENDER BOTH SIDES OF THE TERRAIN TO FIX INVISIBILITY ---
-                        side: THREE.DoubleSide
+                        metalness: 0.2
                     });
 
-                    const plane = new THREE.Mesh(planeGeom, planeMat);
-                    plane.rotation.x = -Math.PI / 2;
-                    scene.add(plane);
-                    const tilePos = tileToWorld(x, y, z);
-                    plane.position.x = tilePos.x;
-                    plane.position.z = tilePos.z;
                     const terrainUrl = `https://api.maptiler.com/tiles/terrain-rgb/${z}/${x}/${y}.png?key=get_your_own_D6C245K8p32A3sJa2f58`;
                     const terrainData = await getTerrainData(terrainUrl);
                     terrainTiles[`${x},${y}`] = terrainData;
+
+                    // 3. Now that the geometry is flat, apply height to its Y-axis.
                     const positions = planeGeom.attributes.position;
                     for (let i = 0; i < positions.count; i++) {
+                        // The original u,v logic was based on the original vertex positions before rotation.
+                        // After rotation, the original vertex 'y' is now in the 'z' component.
                         const u = positions.getX(i) / worldSize + 0.5;
-                        const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
+                        const v = 1.0 - (positions.getZ(i) / worldSize + 0.5);
                         const height = sampleTerrain(terrainData, u, v);
                         positions.setY(i, height);
                     }
                     positions.needsUpdate = true;
                     planeGeom.computeVertexNormals();
+
+                    // 4. Create the mesh. It no longer needs to be rotated.
+                    const plane = new THREE.Mesh(planeGeom, planeMat);
+                    scene.add(plane);
+                    
+                    // 5. Position the mesh in the world.
+                    const tilePos = tileToWorld(x, y, z);
+                    plane.position.x = tilePos.x;
+                    plane.position.z = tilePos.z;
                 }
 
                 async function loadBuildings() {
@@ -372,7 +378,7 @@
                     const worldSize = tileToWorldSize(TILE_ZOOM);
                     const tileX = Math.floor(worldX / worldSize) + centerTileX;
                     const tileY = Math.floor(worldZ / worldSize) + centerTileY;
-                    const data = terrainTiles[`${tileX},${tileY}`];
+                    const data = terrainTiles[`${x},${y}`];
                     if (!data) return 0;
                     const u = (worldX % worldSize) / worldSize;
                     const v = (worldZ % worldSize) / worldSize;
