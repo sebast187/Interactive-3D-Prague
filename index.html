@@ -87,8 +87,6 @@
                 const MAP_CENTER_CONFIG = { lat: 50.0874, lon: 14.4208 };
                 const TILE_ZOOM = 16;
                 const TILE_GRID_SIZE = 7;
-                // --- FIX: Define a base altitude to subtract, centering the terrain at Y=0 ---
-                const TERRAIN_BASE_ALTITUDE = 235; // Approx average altitude of Prague
                 
                 let scene, camera, renderer, controls, activeMarker;
                 const canvasContainer = document.getElementById('canvas-container');
@@ -103,6 +101,7 @@
                     camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, 20000);
                     camera.position.set(0, 1000, 1000);
                     
+                    // Renderer is created WITHOUT the logarithmic depth buffer now
                     renderer = new THREE.WebGLRenderer({ antialias: true });
                     
                     renderer.setPixelRatio(window.devicePixelRatio);
@@ -173,8 +172,7 @@
                         const u = positions.getX(i) / worldSize + 0.5;
                         const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
                         const height = sampleTerrain(terrainData, u, v);
-                        // --- FIX 1/2: Subtract the base altitude to center the terrain at Y=0 ---
-                        positions.setZ(i, height - TERRAIN_BASE_ALTITUDE);
+                        positions.setZ(i, height);
                     }
                     positions.needsUpdate = true;
                     planeGeom.computeVertexNormals();
@@ -191,10 +189,8 @@
                         processGeoJson(geojson);
                         loader.style.display = 'none';
                     } catch (error) {
-                        // This makes the app runnable even if the geojson file is missing
-                        appLoaderText.textContent = `Buildings could not be loaded: ${error.message}.`;
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        loader.style.display = 'none';
+                        appLoaderText.textContent = `Error: ${error.message}.`;
+                        spinner.style.display = 'none';
                     }
                 }
                 
@@ -285,9 +281,7 @@
                     if (!data) return 0;
                     const u = (worldX % worldSize) / worldSize;
                     const v = (worldZ % worldSize) / worldSize;
-                    const height = sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1);
-                    // --- FIX 2/2: Subtract the same base altitude here to place buildings correctly ---
-                    return height - TERRAIN_BASE_ALTITUDE;
+                    return sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1);
                 }
                 
                 function populateLocationsList() { const list = document.getElementById('locations-list'); destinations.forEach((dest, index) => { const li = document.createElement('li'); li.textContent = dest.name; li.dataset.index = index; li.addEventListener('click', onLocationClick); list.appendChild(li); }); }
