@@ -101,7 +101,6 @@
                     camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, 20000);
                     camera.position.set(0, 1000, 1000);
                     
-                    // Renderer is created WITHOUT the logarithmic depth buffer now
                     renderer = new THREE.WebGLRenderer({ antialias: true });
                     
                     renderer.setPixelRatio(window.devicePixelRatio);
@@ -152,7 +151,7 @@
                     const mapTexture = await textureLoader.loadAsync(mapUrl);
                     mapTexture.encoding = THREE.sRGBEncoding;
 
-                    // --- FIX: APPLY POLYGON OFFSET TO THE MAP TILE MATERIAL ---
+                    // --- FIX: APPLY POLYGON OFFSET TO THE MAP TILE MATERIAL TO PREVENT Z-FIGHTING ---
                     const planeMat = new THREE.MeshStandardMaterial({ 
                         map: mapTexture, 
                         roughness: 0.8, 
@@ -185,6 +184,8 @@
                 async function loadBuildings() {
                     try {
                         appLoaderText.textContent = 'Loading buildings...';
+                        // Note: You must provide the prague_buildings.geojson file for this to work.
+                        // For testing, this fetch might fail if the file is not in the same directory.
                         const response = await fetch('prague_buildings.geojson');
                         if (!response.ok) throw new Error(`HTTP ${response.status} fetching GeoJSON`);
                         const geojson = await response.json();
@@ -193,8 +194,10 @@
                         processGeoJson(geojson);
                         loader.style.display = 'none';
                     } catch (error) {
-                        appLoaderText.textContent = `Error: ${error.message}.`;
+                        appLoaderText.textContent = `Error: ${error.message}. Buildings could not be loaded. Please ensure 'prague_buildings.geojson' is present.`;
                         spinner.style.display = 'none';
+                        // Keep the app running without buildings
+                        setTimeout(() => { loader.style.display = 'none'; }, 4000);
                     }
                 }
                 
