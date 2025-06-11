@@ -13,6 +13,8 @@
             --text-muted: #6c757d;
             --sky-color: #87CEEB; /* Light sky blue */
             --building-color: #f0e6d2; /* Light beige for buildings */
+            --error-bg: #2a2a2a;
+            --error-text: #e8e8e8;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100dvh; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-light); color: var(--text-dark); }
@@ -32,6 +34,48 @@
         }
         .spinner { border: 4px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top: 4px solid var(--primary-accent); width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* --- NEW: ERROR CONSOLE STYLES --- */
+        #error-console {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            width: 400px;
+            max-width: 90%;
+            height: 200px;
+            background-color: var(--error-bg);
+            color: var(--error-text);
+            border-top-left-radius: 8px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            font-family: monospace;
+            font-size: 12px;
+            box-shadow: -2px -2px 10px rgba(0,0,0,0.3);
+            transform: translateY(100%);
+            transition: transform 0.3s ease-in-out;
+        }
+        #error-console.visible {
+            transform: translateY(0);
+        }
+        #error-header {
+            padding: 5px 10px;
+            background-color: #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        #error-log {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        #error-log .error { color: #ff8a8a; }
+        #error-log .log { color: #e0e0e0; }
+
         @media (max-width: 768px) {
             #app-container { flex-direction: column; }
             #sidebar { width: 100%; height: 40%; flex-shrink: 1; border-right: none; border-bottom: 1px solid #dee2e6; }
@@ -49,8 +93,50 @@
             <div id="loader"><div class="spinner"></div><div id="loader-text">Loading Core Libraries...</div></div>
         </div>
     </div>
+
+    <!-- --- NEW: ERROR CONSOLE HTML --- -->
+    <div id="error-console">
+        <div id="error-header">
+            <span>JavaScript Console</span>
+            <span id="error-toggle-btn">[ Hide ]</span>
+        </div>
+        <div id="error-log"></div>
+    </div>
     
     <script>
+        // --- NEW: ERROR CONSOLE SCRIPT ---
+        const errorConsole = document.getElementById('error-console');
+        const errorLog = document.getElementById('error-log');
+        const errorHeader = document.getElementById('error-header');
+        let consoleVisible = false;
+
+        function showConsole() {
+            if (!consoleVisible) {
+                errorConsole.classList.add('visible');
+                consoleVisible = true;
+            }
+        }
+
+        errorHeader.addEventListener('click', () => {
+            errorConsole.classList.toggle('visible');
+            consoleVisible = errorConsole.classList.contains('visible');
+        });
+
+        function logToScreen(message, type = 'log') {
+            showConsole();
+            const entry = document.createElement('div');
+            entry.classList.add(type);
+            entry.textContent = `> ${message}`;
+            errorLog.appendChild(entry);
+            errorLog.scrollTop = errorLog.scrollHeight; // Auto-scroll
+        }
+
+        window.onerror = function(message, source, lineno, colno, error) {
+            const errorMsg = `${message} (at ${source.split('/').pop()}:${lineno}:${colno})`;
+            logToScreen(errorMsg, 'error');
+            return true; // Prevents the default browser error handling
+        };
+
         // BOOTLOADER SCRIPT
         const loaderText = document.getElementById('loader-text');
         const spinner = document.querySelector('.spinner');
@@ -70,13 +156,17 @@
             try {
                 for (const url of LIBRARIES) {
                     loaderText.textContent = `Loading ${url.split('/').pop()}...`;
+                    logToScreen(`Loading ${url.split('/').pop()}...`);
                     await loadScript(url);
                 }
                 loaderText.textContent = 'Libraries loaded. Starting App...';
+                logToScreen('Libraries loaded. Starting App...');
                 startApp();
             } catch (error) {
-                loaderText.textContent = 'Fatal Error: Could not load libraries. ' + error.message;
+                const msg = 'Fatal Error: Could not load libraries. ' + error.message;
+                loaderText.textContent = msg;
                 spinner.style.display = 'none';
+                logToScreen(msg, 'error');
             }
         }
         
@@ -154,7 +244,9 @@
                     const planeMat = new THREE.MeshStandardMaterial({ 
                         map: mapTexture, 
                         roughness: 0.8, 
-                        metalness: 0.2
+                        metalness: 0.2,
+                        // --- FIX: RENDER BOTH SIDES OF THE TERRAIN TO FIX INVISIBILITY ---
+                        side: THREE.DoubleSide
                     });
 
                     const plane = new THREE.Mesh(planeGeom, planeMat);
@@ -171,8 +263,6 @@
                         const u = positions.getX(i) / worldSize + 0.5;
                         const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
                         const height = sampleTerrain(terrainData, u, v);
-                        // --- FIX: Apply height to the Y-axis of the vertex, not the Z-axis ---
-                        // A default PlaneGeometry is in XY. After rotation, its Y becomes world 'up'.
                         positions.setY(i, height);
                     }
                     positions.needsUpdate = true;
@@ -186,13 +276,15 @@
                         if (!response.ok) throw new Error(`HTTP ${response.status} fetching GeoJSON`);
                         const geojson = await response.json();
                         appLoaderText.textContent = `Processing ${geojson.features.length} buildings...`;
+                        logToScreen(`Processing ${geojson.features.length} buildings...`);
                         await new Promise(resolve => setTimeout(resolve, 50));
                         processGeoJson(geojson);
                         loader.style.display = 'none';
                     } catch (error) {
-                        appLoaderText.textContent = `Error: ${error.message}. Buildings could not be loaded. Please ensure 'prague_buildings.geojson' is present.`;
+                        const msg = `Error: ${error.message}. Buildings could not be loaded. Please ensure 'prague_buildings.geojson' is present.`;
+                        appLoaderText.textContent = msg;
+                        logToScreen(msg, 'error');
                         spinner.style.display = 'none';
-                        // Keep the app running without buildings
                         setTimeout(() => { loader.style.display = 'none'; }, 4000);
                     }
                 }
@@ -311,6 +403,7 @@
             } catch (e) {
                 document.getElementById('loader-text').textContent = 'An application error occurred: ' + e.message;
                 spinner.style.display = 'none';
+                logToScreen('An application error occurred: ' + e.message, 'error');
             }
         }
         bootstrap();
