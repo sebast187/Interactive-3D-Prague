@@ -86,7 +86,7 @@
                 
                 const MAP_CENTER_CONFIG = { lat: 50.0874, lon: 14.4208 };
                 const TILE_ZOOM = 14; 
-                const TILE_GRID_SIZE = 7; 
+                const TILE_GRID_SIZE = 9; // Increased grid size slightly
                 
                 let scene, camera, renderer, controls, activeMarker;
                 const canvasContainer = document.getElementById('canvas-container');
@@ -97,12 +97,24 @@
 
                 const terrainTiles = {}; 
 
-                // const MAPTILER_VISUAL_MAP_KEY = "yfq0ahL8ehYkCQCgwH27"; // Keep if you want to retry MapTiler streets later
+                // Pre-calculate these globally within startApp scope
+                let _centerTileX, _centerTileY, _worldScaleForZoom;
 
                 function init() {
+                    _centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM); 
+                    _centerTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM);
+                    _worldScaleForZoom = (2 * Math.PI * 6378137) / Math.pow(2, TILE_ZOOM); 
+
                     scene = new THREE.Scene();
                     scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--sky-color'));
-                    camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, 30000); 
+                    
+                    // Add Fog
+                    const fogNear = TILE_GRID_SIZE * _worldScaleForZoom * 0.25; // Start fog within the grid
+                    const fogFar = TILE_GRID_SIZE * _worldScaleForZoom * 0.65;   // Fog fully opaque near edge of grid
+                    scene.fog = new THREE.Fog(getComputedStyle(document.documentElement).getPropertyValue('--sky-color'), fogNear, fogFar);
+
+
+                    camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, fogFar * 1.5); // Adjust far plane based on fog
                     camera.position.set(0, 1500, 1500); 
                     
                     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -115,7 +127,7 @@
                     controls.enableDamping = true;
                     controls.dampingFactor = 0.05;
                     controls.minDistance = 100; 
-                    controls.maxDistance = 10000; 
+                    controls.maxDistance = fogFar * 0.9; // Don't allow zooming too far into the fog
                     controls.maxPolarAngle = Math.PI / 2.05; 
                     
                     const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); 
@@ -125,9 +137,9 @@
                     directionalLight.castShadow = true;
                     directionalLight.shadow.mapSize.width = 2048; 
                     directionalLight.shadow.mapSize.height = 2048;
-                    const shadowCamSize = 4000;
+                    const shadowCamSize = fogFar * 0.5; // Shadow camera should cover visible area
                     directionalLight.shadow.camera.near = 200;
-                    directionalLight.shadow.camera.far = 6000;
+                    directionalLight.shadow.camera.far = 6000; // Can be larger
                     directionalLight.shadow.camera.left = -shadowCamSize;
                     directionalLight.shadow.camera.right = shadowCamSize;
                     directionalLight.shadow.camera.top = shadowCamSize;
@@ -148,14 +160,12 @@
                 }
 
                 async function loadTerrainAndMapTiles() {
-                    const centerMapTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM); 
-                    const centerMapTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM); 
                     const halfGrid = Math.floor(TILE_GRID_SIZE / 2);
                     const tilePromises = [];
                     for (let i = -halfGrid; i <= halfGrid; i++) {
                         for (let j = -halfGrid; j <= halfGrid; j++) {
-                            const tileX = centerMapTileX + i;
-                            const tileY = centerMapTileY + j;
+                            const tileX = _centerTileX + i; // Use pre-calculated _centerTileX
+                            const tileY = _centerTileY + j; // Use pre-calculated _centerTileY
                             tilePromises.push(createTile(tileX, tileY, TILE_ZOOM));
                         }
                     }
@@ -181,12 +191,9 @@
                 
                 async function createTile(x, y, z) { 
                     const worldSize = tileToWorldSize(z);
-                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 32, 32); 
+                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64); // Increased segments
                     
-                    // --- Using OpenStreetMap URL (no API key needed) ---
                     const mapUrl = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
-                    // If you want to try MapTiler streets again later with a working key:
-                    // const mapUrl = `https://api.maptiler.com/maps/streets-v2/${z}/${x}/${y}.png?key=YOUR_WORKING_MAPTILER_STREETS_KEY`;
                     
                     let mapTexture;
                     try {
@@ -229,15 +236,14 @@
                             const u_coord = positions.getX(i_vertex) / worldSize + 0.5; 
                             const v_coord = 1.0 - (positions.getY(i_vertex) / worldSize + 0.5); 
                             
-                            let height_val = decodeHeight(terrainData.data[i_vertex*4], terrainData.data[i_vertex*4+1], terrainData.data[i_vertex*4+2]); 
+                            let height_val = sampleTerrain(terrainData, u_coord, v_coord); 
                             if (isNaN(height_val)) {
-                                console.warn(`NaN height decoded for AWS terrain tile ${x},${y} at u=${u_coord},v=${v_coord}. Defaulting to 0.`);
                                 height_val = 0; 
                             }
                             positions.setZ(i_vertex, height_val); 
                         }
                         positions.needsUpdate = true;
-                        planeGeom.computeVertexNormals();
+                        planeGeom.computeVertexNormals(); // Crucial for lighting on modified geometry
                     } catch (error) {
                         console.error(`AWS TERRAIN Data Error for tile ${x},${y} (${terrainUrl}):`, error.message || error);
                         terrainTiles[`${x},${y}`] = null; 
@@ -292,7 +298,6 @@
                                 loaderEl.style.display = 'none'; 
                              } else {
                                 appLoaderText.textContent = `Finished buildings, but AWS terrain failed. Check console.`;
-                                console.warn("Loader kept visible because AWS terrain loading seems to have failed significantly.");
                              }
                             console.log("Finished processing all buildings.");
                         }
@@ -360,7 +365,6 @@
                             }
                             return shape;
                         } catch (e) { 
-                            console.warn("Error creating shape from coordinates:", polygon, e);
                             return null; 
                         }
                     };
@@ -373,7 +377,6 @@
                         try {
                             geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
                         } catch (e) {
-                            console.error("Error creating ExtrudeGeometry:", e, "height:", height, "shape points:", shape.getPoints()?.length);
                             return; 
                         }
                         
@@ -392,14 +395,8 @@
                                 const fallbackWorldPos = lonLatToWorld(coords[0][0][0], coords[0][0][1]);
                                 centroidX = fallbackWorldPos.x;
                                 centroidZ = fallbackWorldPos.z;
-                                if(isNaN(centroidX) || isNaN(centroidZ)) {
-                                    console.warn("Cannot position building due to NaN fallback centroid for feature:", feature.properties);
-                                    return; 
-                                }
-                             } else {
-                                 console.warn("Cannot position building, no valid coordinates for centroid for feature:", feature.properties);
-                                 return; 
-                             }
+                                if(isNaN(centroidX) || isNaN(centroidZ)) return; 
+                             } else return; 
                         }
                         
                         building.position.set(centroidX, 0, centroidZ);
@@ -428,9 +425,7 @@
                 function lon2tile(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); }
                 function lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));}
                 
-                const _centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM); 
-                const _centerTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM);
-                const _worldScaleForZoom = (2 * Math.PI * 6378137) / Math.pow(2, TILE_ZOOM); 
+                // _centerTileX, _centerTileY, _worldScaleForZoom are now defined in init() after TILE_ZOOM
 
                 function lonLatToWorld(lon, lat) {
                     const tileXRelative = ((lon + 180) / 360 * Math.pow(2, TILE_ZOOM)) - _centerTileX;
@@ -440,7 +435,6 @@
 
                 function tileToWorld(x, y, z) { 
                     if (z !== TILE_ZOOM) { 
-                        console.warn(`tileToWorld called with zoom ${z} different from TILE_ZOOM ${TILE_ZOOM}. Positioning might be unexpected.`);
                         return { x: (x - _centerTileX) * _worldScaleForZoom, z: (y - _centerTileY) * _worldScaleForZoom };
                     }
                     return { x: (x - _centerTileX) * _worldScaleForZoom, z: (y - _centerTileY) * _worldScaleForZoom };
@@ -464,7 +458,7 @@
                     try {
                         return context.getImageData(0, 0, canvas.width, canvas.height);
                     } catch (e) {
-                         throw new Error(`Error calling getImageData (possibly tainted canvas from cross-origin image if not handled by TextureLoader): ${url} - ${e.message}`);
+                         throw new Error(`Error calling getImageData: ${url} - ${e.message}`);
                     }
                 }
 
@@ -478,7 +472,6 @@
                     const y_pixel = Math.max(0, Math.min(Math.floor(v * (data.height-1)), data.height-1)); 
                     const index_rgba = (y_pixel * data.width + x_pixel) * 4; 
                     if (index_rgba < 0 || index_rgba + 2 >= data.data.length) {
-                        console.warn(`Terrain data access out of bounds at (${x_pixel},${y_pixel}) for u=${u},v=${v}`);
                         return 0; 
                     }
                     return decodeHeight(data.data[index_rgba], data.data[index_rgba+1], data.data[index_rgba+2]);
@@ -494,8 +487,8 @@
                     let u_norm = (worldX - (tileX - _centerTileX) * _worldScaleForZoom) / _worldScaleForZoom; 
                     let v_norm = (worldZ - (tileY - _centerTileY) * _worldScaleForZoom) / _worldScaleForZoom; 
 
-                    u_norm = u_norm - Math.floor(u_norm); 
-                    v_norm = v_norm - Math.floor(v_norm);
+                    u_norm = Math.max(0, Math.min(u_norm, 0.9999999)); // Clamp u to prevent 1.0
+                    v_norm = Math.max(0, Math.min(v_norm, 0.9999999)); // Clamp v to prevent 1.0
 
                     return sampleTerrain(data, u_norm, v_norm);
                 }
@@ -512,6 +505,7 @@
                 }
                 
                 function onLocationClick(event) { 
+                    console.log("Location clicked:", event.target.textContent); // DEBUG
                     document.querySelectorAll('#locations-list li').forEach(item => item.classList.remove('active')); 
                     event.target.classList.add('active'); 
                     const destination = destinations[event.target.dataset.index]; 
@@ -519,19 +513,25 @@
                 }
                 
                 function flyTo(destination) {
+                    console.log("Flying to:", destination.name, destination.lat, destination.lon); // DEBUG
                     const targetWorldPos = lonLatToWorld(destination.lon, destination.lat);
+                    console.log("Target World Pos:", targetWorldPos); // DEBUG
                     if (isNaN(targetWorldPos.x) || isNaN(targetWorldPos.z)) {
                         console.error("Cannot fly to destination, invalid coordinates from lonLatToWorld:", destination);
                         return;
                     }
 
                     const targetHeight = getHeightAtPoint(targetWorldPos.x, targetWorldPos.z);
+                    console.log("Target Height at world pos:", targetHeight); // DEBUG
+                    
                     const cameraYOffset = TILE_ZOOM <= 14 ? 400 : 200; 
                     const cameraZOffset = TILE_ZOOM <= 14 ? 600 : 300; 
 
                     const cameraTargetY = isNaN(targetHeight) ? cameraYOffset : targetHeight + cameraYOffset; 
                     
-                    const cameraTargetPos = { x: targetWorldPos.x, y: cameraTargetY, z: targetWorldPos.z + cameraTargetZOffset };
+                    const cameraTargetPos = { x: targetWorldPos.x, y: cameraTargetY, z: targetWorldPos.z + cameraZOffset };
+                    console.log("Camera Target Pos:", cameraTargetPos); // DEBUG
+                    console.log("Controls Target:", {x: targetWorldPos.x, y: (isNaN(targetHeight) ? 0 : targetHeight), z: targetWorldPos.z }); // DEBUG
                     
                     if (!activeMarker) { 
                         const markerHeight = TILE_ZOOM <= 14 ? 60 : 40;
@@ -548,9 +548,17 @@
                     const markerYPos = isNaN(targetHeight) ? activeMarker.geometry.parameters.height / 2 : targetHeight + activeMarker.geometry.parameters.height / 2; 
                     activeMarker.position.set(targetWorldPos.x, markerYPos, targetWorldPos.z);
                     activeMarker.visible = true; 
+                    console.log("Marker Position:", activeMarker.position); // DEBUG
                     
-                    new TWEEN.Tween(camera.position).to(cameraTargetPos, 2000).easing(TWEEN.Easing.Quadratic.InOut).start(); 
-                    new TWEEN.Tween(controls.target).to({ x: targetWorldPos.x, y: isNaN(targetHeight) ? 0 : targetHeight, z: targetWorldPos.z }, 2000).easing(TWEEN.Easing.Quadratic.InOut).start(); 
+                    new TWEEN.Tween(camera.position)
+                        .to(cameraTargetPos, 2000)
+                        .easing(TWEEN.Easing.Quadratic.InOut)
+                        .onUpdate(() => controls.update()) // Ensure controls are updated during tween
+                        .start(); 
+                    new TWEEN.Tween(controls.target)
+                        .to({ x: targetWorldPos.x, y: (isNaN(targetHeight) ? 0 : targetHeight), z: targetWorldPos.z }, 2000)
+                        .easing(TWEEN.Easing.Quadratic.InOut)
+                        .start(); 
                 }
                 
                 function onWindowResize() { 
@@ -562,7 +570,7 @@
                 function animate() { 
                     requestAnimationFrame(animate); 
                     TWEEN.update(); 
-                    controls.update(); 
+                    controls.update(); // OrbitControls update
                     renderer.render(scene, camera); 
                 }
                 
