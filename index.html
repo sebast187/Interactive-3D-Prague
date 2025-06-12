@@ -147,37 +147,92 @@
                 
                 async function createTile(x, y, z) {
                     const worldSize = tileToWorldSize(z);
-                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64);
+                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64); // Segments: 64x64 is quite high-poly, maybe reduce for testing if needed
                     const mapUrl = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
-                    const mapTexture = await textureLoader.loadAsync(mapUrl);
-                    mapTexture.encoding = THREE.sRGBEncoding;
-
+                    
+                    let mapTexture;
+                    try {
+                        mapTexture = await textureLoader.loadAsync(mapUrl);
+                        mapTexture.encoding = THREE.sRGBEncoding;
+                    } catch (e) {
+                        console.error(`Failed to load map texture for tile ${x},${y}:`, e);
+                        // Use a placeholder material or skip this tile
+                        // For now, let's allow it to proceed and see terrain issue
+                        mapTexture = new THREE.Texture(); // Dummy texture
+                    }
+                
                     const planeMat = new THREE.MeshStandardMaterial({ 
                         map: mapTexture, 
                         roughness: 0.8, 
-                        metalness: 0.2
+                        metalness: 0.2,
+                        // side: THREE.DoubleSide // Can be useful for debugging, but not the primary issue here
                     });
-
+                
                     const plane = new THREE.Mesh(planeGeom, planeMat);
                     plane.rotation.x = -Math.PI / 2;
                     scene.add(plane);
                     const tilePos = tileToWorld(x, y, z);
                     plane.position.x = tilePos.x;
                     plane.position.z = tilePos.z;
-                    const terrainUrl = `https://api.maptiler.com/tiles/terrain-rgb/${z}/${x}/${y}.png?key=get_your_own_D6C245K8p32A3sJa2f58`;
-                    const terrainData = await getTerrainData(terrainUrl);
-                    terrainTiles[`${x},${y}`] = terrainData;
-                    const positions = planeGeom.attributes.position;
-                    for (let i = 0; i < positions.count; i++) {
-                        const u = positions.getX(i) / worldSize + 0.5;
-                        const v = 1.0 - (positions.getY(i) / worldSize + 0.5);
-                        const height = sampleTerrain(terrainData, u, v);
-                        positions.setZ(i, height);
+                    // plane.position.y = 0; // Default, explicit for clarity
+                
+                    const terrainUrl = `https://api.maptiler.com/tiles/terrain-rgb/${z}/${x}/${y}.png?key=wUpgt1kwi2BbRLIzM8hn`; // <-- IMPORTANT: USE YOUR KEY
+                    
+                    try {
+                        const terrainData = await getTerrainData(terrainUrl); // ImageData
+                        
+                        // ---- START DEBUG LOGGING ----
+                        console.log(`Tile ${x},${y}: terrainData dimensions: ${terrainData.width}x${terrainData.height}`);
+                        if (terrainData.width === 0 || terrainData.height === 0) {
+                            console.error(`Tile ${x},${y}: ERROR - Terrain data has zero width or height. Aborting height modification for this tile.`);
+                            return; // Skip modifying this tile if data is invalid
+                        }
+                        let firstPixelR = terrainData.data[0];
+                        let firstPixelG = terrainData.data[1];
+                        let firstPixelB = terrainData.data[2];
+                        console.log(`Tile ${x},${y}: Sample pixel (0,0) RGB: (${firstPixelR},${firstPixelG},${firstPixelB})`);
+                        let sampleHeight = decodeHeight(firstPixelR, firstPixelG, firstPixelB);
+                        console.log(`Tile ${x},${y}: Decoded height for (0,0): ${sampleHeight}`);
+                        // ---- END DEBUG LOGGING ----
+                
+                        terrainTiles[`${x},${y}`] = terrainData; // Store it for getHeightAtPoint
+                
+                        const positions = planeGeom.attributes.position;
+                        let minH = Infinity, maxH = -Infinity; // For logging range
+                        let nanCount = 0;
+                
+                        for (let i = 0; i < positions.count; i++) {
+                            const u = positions.getX(i) / worldSize + 0.5;
+                            const v = 1.0 - (positions.getY(i) / worldSize + 0.5); // PlaneGeometry Y is up in its local space
+                            
+                            const height = sampleTerrain(terrainData, u, v);
+                
+                            if (isNaN(height)) {
+                                nanCount++;
+                                positions.setZ(i, 0); // Default to 0 if NaN, to prevent geometry corruption
+                            } else {
+                                positions.setZ(i, height); // Local Z becomes world Y after rotation
+                                minH = Math.min(minH, height);
+                                maxH = Math.max(maxH, height);
+                            }
+                        }
+                        if (nanCount > 0) {
+                            console.warn(`Tile ${x},${y}: Found ${nanCount} NaN height values. Defaulted to 0.`);
+                        }
+                        console.log(`Tile ${x},${y}: Applied height range: [${minH}, ${maxH}]`);
+                        // ---- END MORE DEBUG LOGGING ----
+                
+                        positions.needsUpdate = true;
+                        planeGeom.computeVertexNormals();
+                
+                    } catch (error) {
+                        console.error(`Failed to process terrain for tile ${x},${y} using URL ${terrainUrl}:`, error);
+                        // Optionally add a flat, colored placeholder tile to indicate error
+                        // Or just let it be without terrain modification
+                        appLoaderText.textContent = `Error loading terrain for tile ${x},${y}: ${error.message}. Some terrain may be flat.`;
                     }
-                    positions.needsUpdate = true;
-                    planeGeom.computeVertexNormals();
                 }
-
+                
                 async function loadBuildings() {
                     try {
                         appLoaderText.textContent = 'Loading buildings...';
