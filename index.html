@@ -86,14 +86,14 @@
                 
                 const MAP_CENTER_CONFIG = { lat: 50.0874, lon: 14.4208 };
                 const TILE_ZOOM = 16;
-                const TILE_GRID_SIZE = 7;
+                const TILE_GRID_SIZE = 7; // Keep this odd for a center tile
                 
                 let scene, camera, renderer, controls, activeMarker;
                 const canvasContainer = document.getElementById('canvas-container');
                 const loader = document.getElementById('loader');
-                const appLoaderText = document.getElementById('loader-text');
+                const appLoaderText = document.getElementById('loader-text'); // Re-declared for startApp scope
                 const textureLoader = new THREE.TextureLoader();
-                const terrainTiles = {};
+                const terrainTiles = {}; // Stores terrain ImageData per tile key "x,y"
 
                 function init() {
                     scene = new THREE.Scene();
@@ -101,36 +101,51 @@
                     camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, 20000);
                     camera.position.set(0, 1000, 1000);
                     
-                    // Renderer is created WITHOUT the logarithmic depth buffer now
                     renderer = new THREE.WebGLRenderer({ antialias: true });
-                    
                     renderer.setPixelRatio(window.devicePixelRatio);
                     renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
                     renderer.shadowMap.enabled = true;
                     canvasContainer.appendChild(renderer.domElement);
+
                     controls = new THREE.OrbitControls(camera, renderer.domElement);
                     controls.enableDamping = true;
                     controls.dampingFactor = 0.05;
-                    controls.minDistance = 100;
-                    controls.maxDistance = 4000;
-                    controls.maxPolarAngle = Math.PI / 2.1;
-                    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+                    controls.minDistance = 50; // Allow closer zoom
+                    controls.maxDistance = 5000; // Increased max distance slightly
+                    controls.maxPolarAngle = Math.PI / 2.05; // Slightly more than PI/2 to see horizon a bit
+                    
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); // Adjusted intensity
                     scene.add(ambientLight);
-                    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+                    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); // Adjusted intensity
                     directionalLight.position.set(-500, 1200, 800);
                     directionalLight.castShadow = true;
                     directionalLight.shadow.mapSize.width = 2048;
                     directionalLight.shadow.mapSize.height = 2048;
+                    directionalLight.shadow.camera.near = 100;
+                    directionalLight.shadow.camera.far = 3000;
+                    directionalLight.shadow.camera.left = -1500;
+                    directionalLight.shadow.camera.right = 1500;
+                    directionalLight.shadow.camera.top = 1500;
+                    directionalLight.shadow.camera.bottom = -1500;
                     scene.add(directionalLight);
+                    // const shadowHelper = new THREE.CameraHelper(directionalLight.shadow.camera); // For debugging shadows
+                    // scene.add(shadowHelper);
+
                     populateLocationsList();
-                    loadMapAndBuildings();
+                    loadMapAndBuildings(); // This will show loader updates
                     window.addEventListener('resize', onWindowResize, false);
                     animate();
                 }
 
-                async function loadMapAndBuildings() { await loadTerrainAndMapTiles(); await loadBuildings(); }
+                async function loadMapAndBuildings() { 
+                    appLoaderText.textContent = 'Loading terrain & map tiles...';
+                    await loadTerrainAndMapTiles(); 
+                    appLoaderText.textContent = 'Loading buildings...';
+                    await loadBuildings(); 
+                    // Loader hidden in loadBuildings success path
+                }
+
                 async function loadTerrainAndMapTiles() {
-                    appLoaderText.textContent = 'Loading terrain & map...';
                     const centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM);
                     const centerTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM);
                     const halfGrid = Math.floor(TILE_GRID_SIZE / 2);
@@ -147,7 +162,7 @@
                 
                 async function createTile(x, y, z) {
                     const worldSize = tileToWorldSize(z);
-                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64); // Segments: 64x64 is quite high-poly, maybe reduce for testing if needed
+                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 32, 32); // Reduced segments for performance
                     const mapUrl = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
                     
                     let mapTexture;
@@ -155,97 +170,75 @@
                         mapTexture = await textureLoader.loadAsync(mapUrl);
                         mapTexture.encoding = THREE.sRGBEncoding;
                     } catch (e) {
-                        console.error(`Failed to load map texture for tile ${x},${y}:`, e);
-                        // Use a placeholder material or skip this tile
-                        // For now, let's allow it to proceed and see terrain issue
-                        mapTexture = new THREE.Texture(); // Dummy texture
+                        console.error(`Failed to load map texture for tile ${x},${y} from ${mapUrl}:`, e);
+                        mapTexture = new THREE.Texture(); // Placeholder to avoid breaking material
                     }
-                
+
                     const planeMat = new THREE.MeshStandardMaterial({ 
                         map: mapTexture, 
-                        roughness: 0.8, 
-                        metalness: 0.2,
-                        // side: THREE.DoubleSide // Can be useful for debugging, but not the primary issue here
+                        roughness: 0.9, // More matte for ground
+                        metalness: 0.1
                     });
-                
+
                     const plane = new THREE.Mesh(planeGeom, planeMat);
                     plane.rotation.x = -Math.PI / 2;
+                    plane.receiveShadow = true; // Terrain should receive shadows
                     scene.add(plane);
-                    const tilePos = tileToWorld(x, y, z);
+                    
+                    const tilePos = tileToWorld(x, y, z); // This uses the global centerTileX/Y
                     plane.position.x = tilePos.x;
                     plane.position.z = tilePos.z;
-                    // plane.position.y = 0; // Default, explicit for clarity
-                
-                    const terrainUrl = `https://api.maptiler.com/tiles/terrain-rgb/${z}/${x}/${y}.png?key=wUpgt1kwi2BbRLIzM8hn`; // <-- IMPORTANT: USE YOUR KEY
                     
+                    const terrainUrl = `https://api.maptiler.com/tiles/terrain-rgb/${z}/${x}/${y}.png?key=wUpgt1kwi2BbRLIzM8hn`; // YOUR API KEY HERE
+
                     try {
                         const terrainData = await getTerrainData(terrainUrl); // ImageData
                         
-                        // ---- START DEBUG LOGGING ----
-                        console.log(`Tile ${x},${y}: terrainData dimensions: ${terrainData.width}x${terrainData.height}`);
-                        if (terrainData.width === 0 || terrainData.height === 0) {
-                            console.error(`Tile ${x},${y}: ERROR - Terrain data has zero width or height. Aborting height modification for this tile.`);
-                            return; // Skip modifying this tile if data is invalid
+                        if (!terrainData || terrainData.width === 0 || terrainData.height === 0) {
+                            console.warn(`Tile ${x},${y}: Invalid terrain data (e.g. from failed load: ${terrainUrl}). Skipping height modification.`);
+                            terrainTiles[`${x},${y}`] = null; // Mark as no data
+                            return; 
                         }
-                        let firstPixelR = terrainData.data[0];
-                        let firstPixelG = terrainData.data[1];
-                        let firstPixelB = terrainData.data[2];
-                        console.log(`Tile ${x},${y}: Sample pixel (0,0) RGB: (${firstPixelR},${firstPixelG},${firstPixelB})`);
-                        let sampleHeight = decodeHeight(firstPixelR, firstPixelG, firstPixelB);
-                        console.log(`Tile ${x},${y}: Decoded height for (0,0): ${sampleHeight}`);
-                        // ---- END DEBUG LOGGING ----
-                
                         terrainTiles[`${x},${y}`] = terrainData; // Store it for getHeightAtPoint
-                
+
                         const positions = planeGeom.attributes.position;
-                        let minH = Infinity, maxH = -Infinity; // For logging range
-                        let nanCount = 0;
-                
                         for (let i = 0; i < positions.count; i++) {
-                            const u = positions.getX(i) / worldSize + 0.5;
-                            const v = 1.0 - (positions.getY(i) / worldSize + 0.5); // PlaneGeometry Y is up in its local space
+                            const u = positions.getX(i) / worldSize + 0.5; // From -worldSize/2..worldSize/2 to 0..1
+                            const v = 1.0 - (positions.getY(i) / worldSize + 0.5); // PlaneGeometry Y is up, map v is down
                             
-                            const height = sampleTerrain(terrainData, u, v);
-                
+                            let height = sampleTerrain(terrainData, u, v);
                             if (isNaN(height)) {
-                                nanCount++;
-                                positions.setZ(i, 0); // Default to 0 if NaN, to prevent geometry corruption
-                            } else {
-                                positions.setZ(i, height); // Local Z becomes world Y after rotation
-                                minH = Math.min(minH, height);
-                                maxH = Math.max(maxH, height);
+                                height = 0; // Default to 0 if NaN to prevent geometry corruption
                             }
+                            positions.setZ(i, height); // Local Z becomes world Y after rotation
                         }
-                        if (nanCount > 0) {
-                            console.warn(`Tile ${x},${y}: Found ${nanCount} NaN height values. Defaulted to 0.`);
-                        }
-                        console.log(`Tile ${x},${y}: Applied height range: [${minH}, ${maxH}]`);
-                        // ---- END MORE DEBUG LOGGING ----
-                
                         positions.needsUpdate = true;
                         planeGeom.computeVertexNormals();
-                
                     } catch (error) {
-                        console.error(`Failed to process terrain for tile ${x},${y} using URL ${terrainUrl}:`, error);
-                        // Optionally add a flat, colored placeholder tile to indicate error
-                        // Or just let it be without terrain modification
-                        appLoaderText.textContent = `Error loading terrain for tile ${x},${y}: ${error.message}. Some terrain may be flat.`;
+                        console.error(`Failed to process terrain for tile ${x},${y} (${terrainUrl}):`, error);
+                        terrainTiles[`${x},${y}`] = null; // Mark as no data on error
+                        appLoaderText.textContent = `Error loading terrain for some tiles. Some areas may be flat.`;
                     }
                 }
-                
+
                 async function loadBuildings() {
                     try {
-                        appLoaderText.textContent = 'Loading buildings...';
+                        // appLoaderText.textContent = 'Loading buildings...'; // Already set by caller
                         const response = await fetch('prague_buildings.geojson');
                         if (!response.ok) throw new Error(`HTTP ${response.status} fetching GeoJSON`);
                         const geojson = await response.json();
-                        appLoaderText.textContent = `Processing ${geojson.features.length} buildings...`;
-                        await new Promise(resolve => setTimeout(resolve, 50));
+                        
+                        appLoaderText.textContent = `Processing ${geojson.features.length} buildings... This may take a moment.`;
+                        // Yield to browser for UI update
+                        await new Promise(resolve => setTimeout(resolve, 50)); 
+                        
                         processGeoJson(geojson);
-                        loader.style.display = 'none';
+                        loader.style.display = 'none'; // Hide loader on success
                     } catch (error) {
-                        appLoaderText.textContent = `Error: ${error.message}.`;
-                        spinner.style.display = 'none';
+                        appLoaderText.textContent = `Error loading buildings: ${error.message}. Buildings may not appear.`;
+                        console.error("Building load error:", error);
+                        // Do not hide loader on critical error for buildings, or provide different feedback
+                        // spinner.style.display = 'none'; // Keep spinner if buildings are crucial
                     }
                 }
                 
@@ -253,119 +246,290 @@
                     const baseMaterial = new THREE.MeshStandardMaterial({
                         color: getComputedStyle(document.documentElement).getPropertyValue('--building-color'),
                         metalness: 0.1,
-                        roughness: 0.6
+                        roughness: 0.7
                     });
-                    geojson.features.forEach(feature => { 
-                        if (feature.geometry) addBuilding(feature, baseMaterial); 
-                    });
+                    let featureCount = 0;
+                    const totalFeatures = geojson.features.length;
+
+                    function processBatch(startIndex) {
+                        const batchSize = 100; // Process 100 features at a time
+                        for (let i = startIndex; i < Math.min(startIndex + batchSize, totalFeatures); i++) {
+                            const feature = geojson.features[i];
+                            if (feature.geometry) {
+                                addBuilding(feature, baseMaterial);
+                            }
+                            featureCount++;
+                        }
+
+                        if (featureCount % 500 === 0 || featureCount === totalFeatures) {
+                             appLoaderText.textContent = `Processed ${featureCount} / ${totalFeatures} buildings...`;
+                        }
+
+                        if (startIndex + batchSize < totalFeatures) {
+                            requestAnimationFrame(() => processBatch(startIndex + batchSize));
+                        } else {
+                            // Optionally, loader can be hidden here if not already
+                            // loader.style.display = 'none'; 
+                            console.log("Finished processing all buildings.");
+                        }
+                    }
+                    requestAnimationFrame(() => processBatch(0)); // Start batch processing
                 }
                 
                 function addBuilding(feature, baseMat) {
                     const geomType = feature.geometry.type;
                     const coords = feature.geometry.coordinates;
                     const properties = feature.properties;
-                    let height = properties.height || (properties['building:levels'] ? properties['building:levels'] * 3.5 : 10 + Math.random() * 20);
+                    
+                    let height;
+                    const defaultFallbackHeight = 8 + Math.random() * 12;
+
+                    if (properties && properties.height) {
+                        if (typeof properties.height === 'string') {
+                            height = parseFloat(properties.height);
+                        } else if (typeof properties.height === 'number') {
+                            height = properties.height;
+                        }
+                    }
+
+                    if (isNaN(height) || height <= 0) {
+                        if (properties && properties['building:levels']) {
+                            let levels;
+                            if (typeof properties['building:levels'] === 'string') {
+                                levels = parseFloat(properties['building:levels']);
+                            } else if (typeof properties['building:levels'] === 'number') {
+                                levels = properties['building:levels'];
+                            }
+                            if (!isNaN(levels) && levels > 0) {
+                                height = levels * 3.2; // Adjusted avg height per level
+                            }
+                        }
+                    }
+
+                    if (isNaN(height) || height <= 0) {
+                        height = defaultFallbackHeight;
+                    }
+                    if (height > 300) height = 300; // Cap extreme heights
+
                     const shapeFromCoords = (polygon) => {
                         const shape = new THREE.Shape();
                         try {
+                            if (!polygon || polygon.length < 3 || !polygon[0] || !Array.isArray(polygon[0]) || polygon[0].length < 2) return null;
                             const firstPoint = lonLatToWorld(polygon[0][0], polygon[0][1]);
+                            if (isNaN(firstPoint.x) || isNaN(firstPoint.z)) return null;
                             shape.moveTo(firstPoint.x, firstPoint.z);
                             for (let i = 1; i < polygon.length; i++) {
+                                if (!polygon[i] || !Array.isArray(polygon[i]) || polygon[i].length < 2) continue;
                                 const point = lonLatToWorld(polygon[i][0], polygon[i][1]);
+                                if (isNaN(point.x) || isNaN(point.z)) return null;
                                 shape.lineTo(point.x, point.z);
                             }
                             return shape;
-                        } catch (e) { return null; }
+                        } catch (e) { 
+                            // console.warn("Error creating shape from coordinates:", polygon, e);
+                            return null; 
+                        }
                     };
+
                     const createMesh = (shape) => {
                         if (!shape) return;
+                        
                         const extrudeSettings = { steps: 1, depth: height, bevelEnabled: false };
-                        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-                        geometry.center();
-                        const building = new THREE.Mesh(geometry, baseMat);
-                        const centroid = shape.getPoints().reduce((acc, p) => acc.add(p), new THREE.Vector2()).divideScalar(shape.getPoints().length);
-                        building.position.set(centroid.x, 0, centroid.y);
+                        let geometry;
+                        try {
+                            geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                        } catch (e) {
+                            // console.error("Error creating ExtrudeGeometry:", e, "height:", height, "shape points:", shape.getPoints().length);
+                            return; 
+                        }
+                        
+                        geometry.center(); 
+                        
+                        const building = new THREE.Mesh(geometry, baseMat.clone()); 
+
+                        const shapePoints = shape.getPoints();
+                        let centroidX = 0, centroidZ = 0;
+                        if (shapePoints.length > 0) {
+                            shapePoints.forEach(p => { centroidX += p.x; centroidZ += p.y; });
+                            centroidX /= shapePoints.length;
+                            centroidZ /= shapePoints.length;
+                        } else { // Fallback if shape has no points (should not happen if shapeFromCoords is robust)
+                             if (coords && coords[0] && coords[0][0] && Array.isArray(coords[0][0]) && coords[0][0].length >=2) {
+                                const fallbackWorldPos = lonLatToWorld(coords[0][0][0], coords[0][0][1]);
+                                centroidX = fallbackWorldPos.x;
+                                centroidZ = fallbackWorldPos.z;
+                                if(isNaN(centroidX) || isNaN(centroidZ)) return; // Still NaN, can't place
+                             } else return; // Cannot position
+                        }
+                        
+                        building.position.set(centroidX, 0, centroidZ);
                         
                         const groundHeight = getHeightAtPoint(building.position.x, building.position.z);
-                        building.position.y = groundHeight + (height / 2); 
+                        if (isNaN(groundHeight)) {
+                            building.position.y = height / 2; 
+                        } else {
+                            building.position.y = groundHeight + (height / 2); 
+                        }
 
                         building.castShadow = true;
                         building.receiveShadow = true;
                         scene.add(building);
                     };
+
                     if (geomType === 'Polygon') {
-                        createMesh(shapeFromCoords(coords[0]));
+                        if (coords && coords[0]) createMesh(shapeFromCoords(coords[0]));
                     } else if (geomType === 'MultiPolygon') {
-                        coords.forEach(polygon => createMesh(shapeFromCoords(polygon[0])));
+                        if (coords) coords.forEach(polygon => {
+                            if (polygon && polygon[0]) createMesh(shapeFromCoords(polygon[0]));
+                        });
                     }
                 }
                 
+                // --- Coordinate and Tile Utility Functions ---
                 function lon2tile(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); }
                 function lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));}
-                const centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM);
-                const centerTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM);
+                
+                const _centerTileX = lon2tile(MAP_CENTER_CONFIG.lon, TILE_ZOOM); // Store calculated center tile
+                const _centerTileY = lat2tile(MAP_CENTER_CONFIG.lat, TILE_ZOOM);
+                const _worldScaleForZoom = (2 * Math.PI * 6378137) / Math.pow(2, TILE_ZOOM); // Pre-calculate for current zoom
+
                 function lonLatToWorld(lon, lat) {
-                    const tileX = (lon + 180) / 360 * Math.pow(2, TILE_ZOOM);
-                    const tileY = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, TILE_ZOOM);
-                    const worldSize = tileToWorldSize(TILE_ZOOM);
-                    return { x: (tileX - centerTileX) * worldSize, z: (tileY - centerTileY) * worldSize };
+                    const tileXRelative = ((lon + 180) / 360 * Math.pow(2, TILE_ZOOM)) - _centerTileX;
+                    const tileYRelative = ((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, TILE_ZOOM)) - _centerTileY;
+                    return { x: tileXRelative * _worldScaleForZoom, z: tileYRelative * _worldScaleForZoom };
                 }
-                function tileToWorld(x, y, z) { const worldSize = tileToWorldSize(z); return { x: (x - centerTileX) * worldSize, z: (y - centerTileY) * worldSize }; }
-                function tileToWorldSize(z) { return (2 * Math.PI * 6378137) / Math.pow(2, z); }
+
+                function tileToWorld(x, y, z) { // z is tile zoom, not world Z
+                    // Calculates world position relative to the scene's map center
+                    // Assumes x, y are absolute tile numbers for the given zoom z
+                    if (z !== TILE_ZOOM) { // If a different zoom tile is requested for position (not typical here)
+                        const scale = (2 * Math.PI * 6378137) / Math.pow(2, z);
+                        const currentZoomCenterTileX = lon2tile(MAP_CENTER_CONFIG.lon, z);
+                        const currentZoomCenterTileY = lat2tile(MAP_CENTER_CONFIG.lat, z);
+                        return { x: (x - currentZoomCenterTileX) * scale, z: (y - currentZoomCenterTileY) * scale };
+                    }
+                    return { x: (x - _centerTileX) * _worldScaleForZoom, z: (y - _centerTileY) * _worldScaleForZoom };
+                }
+
+                function tileToWorldSize(z) { // Size of one tile at zoom z
+                     return (2 * Math.PI * 6378137) / Math.pow(2, z);
+                }
+                
                 async function getTerrainData(url) {
-                    const image = await textureLoader.loadAsync(url);
+                    const image = await textureLoader.loadAsync(url); // loadAsync should handle image loading promise
                     const canvas = document.createElement('canvas');
-                    canvas.width = image.image.width;
+                    canvas.width = image.image.width; // image.image is the HTMLImageElement
                     canvas.height = image.image.height;
                     const context = canvas.getContext('2d');
+                    if (!context) throw new Error("Could not get 2D context for terrain processing");
                     context.drawImage(image.image, 0, 0);
                     return context.getImageData(0, 0, canvas.width, canvas.height);
                 }
+
                 function decodeHeight(r, g, b) { return -10000 + ((r * 256 * 256 + g * 256 + b) * 0.1); }
-                function sampleTerrain(data, u, v) {
-                    const x = Math.floor(u * (data.width - 1));
-                    const y = Math.floor(v * (data.height - 1));
+                
+                function sampleTerrain(data, u, v) { // u, v are 0..1
+                    if (!data) return 0; // No terrain data for this tile
+                    const x = Math.max(0, Math.min(Math.floor(u * (data.width -1)), data.width -1)); // Clamp x
+                    const y = Math.max(0, Math.min(Math.floor(v * (data.height-1)), data.height-1)); // Clamp y
                     const i = (y * data.width + x) * 4;
+                    if (i < 0 || i + 2 >= data.data.length) return 0; // Out of bounds check
                     return decodeHeight(data.data[i], data.data[i+1], data.data[i+2]);
                 }
+
                 function getHeightAtPoint(worldX, worldZ) {
-                    const worldSize = tileToWorldSize(TILE_ZOOM);
-                    const tileX = Math.floor(worldX / worldSize) + centerTileX;
-                    const tileY = Math.floor(worldZ / worldSize) + centerTileY;
+                    // Convert world coordinates to the tile grid system
+                    const tileX = Math.floor(worldX / _worldScaleForZoom + _centerTileX);
+                    const tileY = Math.floor(worldZ / _worldScaleForZoom + _centerTileY);
+                    
                     const data = terrainTiles[`${tileX},${tileY}`];
-                    if (!data) return 0;
-                    const u = (worldX % worldSize) / worldSize;
-                    const v = (worldZ % worldSize) / worldSize;
-                    return sampleTerrain(data, u >= 0 ? u : u + 1, v >= 0 ? v : v + 1);
+                    if (!data) return 0; // No terrain data for this specific tile, return flat
+
+                    // Calculate u,v within that specific tile
+                    // (worldX % _worldScaleForZoom) can be negative if worldX is negative
+                    let u = (worldX - (tileX - _centerTileX) * _worldScaleForZoom) / _worldScaleForZoom;
+                    let v = (worldZ - (tileY - _centerTileY) * _worldScaleForZoom) / _worldScaleForZoom;
+
+                    // Ensure u,v are within [0,1) for sampling
+                    u = u - Math.floor(u); 
+                    v = v - Math.floor(v);
+
+                    return sampleTerrain(data, u, v);
                 }
                 
-                function populateLocationsList() { const list = document.getElementById('locations-list'); destinations.forEach((dest, index) => { const li = document.createElement('li'); li.textContent = dest.name; li.dataset.index = index; li.addEventListener('click', onLocationClick); list.appendChild(li); }); }
-                function onLocationClick(event) { document.querySelectorAll('#locations-list li').forEach(item => item.classList.remove('active')); event.target.classList.add('active'); const destination = destinations[event.target.dataset.index]; flyTo(destination); }
+                // --- UI and Camera Functions ---
+                function populateLocationsList() { 
+                    const list = document.getElementById('locations-list'); 
+                    destinations.forEach((dest, index) => { 
+                        const li = document.createElement('li'); 
+                        li.textContent = dest.name; 
+                        li.dataset.index = index; 
+                        li.addEventListener('click', onLocationClick); 
+                        list.appendChild(li); 
+                    }); 
+                }
+                
+                function onLocationClick(event) { 
+                    document.querySelectorAll('#locations-list li').forEach(item => item.classList.remove('active')); 
+                    event.target.classList.add('active'); 
+                    const destination = destinations[event.target.dataset.index]; 
+                    flyTo(destination); 
+                }
+                
                 function flyTo(destination) {
                     const targetWorldPos = lonLatToWorld(destination.lon, destination.lat);
+                    if (isNaN(targetWorldPos.x) || isNaN(targetWorldPos.z)) {
+                        console.error("Cannot fly to destination, invalid coordinates:", destination);
+                        return;
+                    }
+
                     const targetHeight = getHeightAtPoint(targetWorldPos.x, targetWorldPos.z);
-                    const cameraTargetPos = { x: targetWorldPos.x, y: targetHeight + 400, z: targetWorldPos.z + 600 };
+                    const cameraTargetY = isNaN(targetHeight) ? 200 : targetHeight + 200; // Viewing height above target
+                    const cameraTargetZOffset = 300; // Distance behind target
+
+                    const cameraTargetPos = { x: targetWorldPos.x, y: cameraTargetY, z: targetWorldPos.z + cameraTargetZOffset };
+                    
                     if (!activeMarker) { 
-                        const markerGeo = new THREE.CylinderGeometry(15, 0, 50, 8); 
-                        const markerMat = new THREE.MeshStandardMaterial({ color: getComputedStyle(document.documentElement).getPropertyValue('--primary-accent'), emissive: getComputedStyle(document.documentElement).getPropertyValue('--primary-accent'), emissiveIntensity: 0.5 }); 
+                        const markerGeo = new THREE.CylinderGeometry(10, 0, 40, 8); // Smaller marker
+                        const markerMat = new THREE.MeshStandardMaterial({ 
+                            color: getComputedStyle(document.documentElement).getPropertyValue('--primary-accent'), 
+                            emissive: getComputedStyle(document.documentElement).getPropertyValue('--primary-accent'), 
+                            emissiveIntensity: 0.6 
+                        }); 
                         activeMarker = new THREE.Mesh(markerGeo, markerMat);
                         scene.add(activeMarker); 
                     }
-                    activeMarker.position.set(targetWorldPos.x, targetHeight + 25, targetWorldPos.z);
+                    const markerY = isNaN(targetHeight) ? 20 : targetHeight + 20; // Marker height above ground
+                    activeMarker.position.set(targetWorldPos.x, markerY, targetWorldPos.z);
                     activeMarker.visible = true; 
-                    new TWEEN.Tween(camera.position).to(cameraTargetPos, 2000).easing(TWEEN.Easing.Cubic.InOut).start(); 
-                    new TWEEN.Tween(controls.target).to({ x: targetWorldPos.x, y: targetHeight, z: targetWorldPos.z }, 2000).easing(TWEEN.Easing.Cubic.InOut).start(); 
+                    
+                    new TWEEN.Tween(camera.position).to(cameraTargetPos, 2000).easing(TWEEN.Easing.Quadratic.InOut).start(); 
+                    new TWEEN.Tween(controls.target).to({ x: targetWorldPos.x, y: isNaN(targetHeight) ? 0 : targetHeight, z: targetWorldPos.z }, 2000).easing(TWEEN.Easing.Quadratic.InOut).start(); 
                 }
-                function onWindowResize() { camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); }
-                function animate() { requestAnimationFrame(animate); TWEEN.update(); controls.update(); renderer.render(scene, camera); }
                 
-                init();
+                function onWindowResize() { 
+                    camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight; 
+                    camera.updateProjectionMatrix(); 
+                    renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); 
+                }
+                
+                function animate() { 
+                    requestAnimationFrame(animate); 
+                    TWEEN.update(); 
+                    controls.update(); 
+                    renderer.render(scene, camera); 
+                }
+                
+                init(); // Start the application
             } catch (e) {
-                document.getElementById('loader-text').textContent = 'An application error occurred: ' + e.message;
-                spinner.style.display = 'none';
+                // This catch is for errors during startApp synchronous setup, not async operations within
+                document.getElementById('loader-text').textContent = 'A critical application error occurred: ' + e.message;
+                const spinnerEl = document.querySelector('#loader .spinner');
+                if(spinnerEl) spinnerEl.style.display = 'none';
+                console.error("Critical App Error:", e);
             }
         }
-        bootstrap();
+        bootstrap(); // Start the bootloader
     </script>
 </body>
 </html>
