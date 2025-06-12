@@ -85,8 +85,14 @@
                 const destinations = [ { name: "Prague Castle", lat: 50.0901, lon: 14.4005 }, { name: "Charles Bridge", lat: 50.0865, lon: 14.4113 }, { name: "Old Town Square", lat: 50.0874, lon: 14.4208 }, { name: "St. Vitus Cathedral", lat: 50.0909, lon: 14.4007 }, { name: "Astronomical Clock", lat: 50.0870, lon: 14.4208 }, { name: "Vyšehrad", lat: 50.0645, lon: 14.4182 }, { name: "Jewish Quarter (Josefov)", lat: 50.0906, lon: 14.4187 }, { name: "National Museum", lat: 50.0792, lon: 14.4307 }, { name: "Dancing House", lat: 50.0754, lon: 14.4140 }, { name: "Lennon Wall", lat: 50.0862, lon: 14.4072 }, { name: "Petřín Tower", lat: 50.0834, lon: 14.3949 }, { name: "Wenceslas Square", lat: 50.0809, lon: 14.4282 }, { name: "Prague Zoo", lat: 50.1171, lon: 14.4042 }, { name: "Municipal House", lat: 50.0881, lon: 14.4282 }, { name: "National Theatre", lat: 50.0811, lon: 14.4137 }, { name: "Golden Lane", lat: 50.0917, lon: 14.4037 }, { name: "Malá Strana (Lesser Town)", lat: 50.0880, lon: 14.4039 }, { name: "St. Nicholas Church (Malá Strana)", lat: 50.0880, lon: 14.4032 }, { name: "Old Royal Palace", lat: 50.0906, lon: 14.4018 }, { name: "Powder Tower", lat: 50.0873, lon: 14.4277 }, { name: "Museum of Communism", lat: 50.0869, lon: 14.4272 }, { name: "Strahov Monastery", lat: 50.0865, lon: 14.3905 }, { name: "Kampa Island", lat: 50.0847, lon: 14.4092 }, { name: "Church of Our Lady before Týn", lat: 50.0877, lon: 14.4226 }, { name: "Franz Kafka Museum", lat: 50.0878, lon: 14.4103 }, { name: "Letná Park", lat: 50.0955, lon: 14.4157 }, { name: "Clementinum", lat: 50.0865, lon: 14.4158 }, { name: "Rudolfinum", lat: 50.0898, lon: 14.4157 }, { name: "The Vrtba Garden", lat: 50.0871, lon: 14.4032 }, { name: "Speculum Alchemiae", lat: 50.0910, lon: 14.4194 }, { name: "St. George's Basilica", lat: 50.0911, lon: 14.4026 }, { name: "Old Jewish Cemetery", lat: 50.0901, lon: 14.4177 }, { name: "Náplavka Farmers Market", lat: 50.0718, lon: 14.4168 }, { name: "Žižkov Television Tower", lat: 50.0809, lon: 14.4513 }, { name: "Divoká Šárka", lat: 50.1064, lon: 14.3313 }, { name: "Španělská synagoga", lat: 50.0903, lon: 14.4206 }, { name: "Museum Kampa", lat: 50.0837, lon: 14.4087 }, { name: "Troja Palace", lat: 50.1147, lon: 14.4102 }, { name: "Prague Metronome", lat: 50.0946, lon: 14.4156 }, { name: "Henry's Tower (Jindřišská věž)", lat: 50.0842, lon: 14.4299 }, { name: "National Technical Museum", lat: 50.0984, lon: 14.4274 }, { name: "Wallenstein Palace", lat: 50.0904, lon: 14.4079 }, { name: "Infant Jesus of Prague", lat: 50.0865, lon: 14.4034 }, { name: "Slav Epic", lat: 50.0772, lon: 14.4148 }, { name: "Estates Theatre", lat: 50.0858, lon: 14.4230 }, { name: "Loreta Praha", lat: 50.0891, lon: 14.3934 }, { name: "House of the Black Madonna", lat: 50.0867, lon: 14.4258 }, { name: "Bertramka", lat: 50.0734, lon: 14.3965 }, { name: "Cross Club", lat: 50.1054, lon: 14.4690 }, { name: "Prague Planetarium", lat: 50.1042, lon: 14.4300 }];
                 
                 const MAP_CENTER_CONFIG = { lat: 50.0874, lon: 14.4208 };
+                // TILE_ZOOM is for TERRAIN data and the base plane geometry
                 const TILE_ZOOM = 14; 
-                const TILE_GRID_SIZE = 9; // Increased grid size slightly
+                // VISUAL_TILE_ZOOM_OFFSET: fetch visual map tiles at TILE_ZOOM + VISUAL_TILE_ZOOM_OFFSET
+                // Offset of 1 means 2x2=4 sub-tiles. Offset of 2 means 4x4=16 sub-tiles.
+                const VISUAL_TILE_ZOOM_OFFSET = 1; // Fetches visual tiles at zoom 15
+                const VISUAL_TILE_SUBDIVISIONS = Math.pow(2, VISUAL_TILE_ZOOM_OFFSET); // 2 for offset 1, 4 for offset 2
+
+                const TILE_GRID_SIZE = 9; 
                 
                 let scene, camera, renderer, controls, activeMarker;
                 const canvasContainer = document.getElementById('canvas-container');
@@ -97,7 +103,6 @@
 
                 const terrainTiles = {}; 
 
-                // Pre-calculate these globally within startApp scope
                 let _centerTileX, _centerTileY, _worldScaleForZoom;
 
                 function init() {
@@ -108,13 +113,11 @@
                     scene = new THREE.Scene();
                     scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--sky-color'));
                     
-                    // Add Fog
-                    const fogNear = TILE_GRID_SIZE * _worldScaleForZoom * 0.25; // Start fog within the grid
-                    const fogFar = TILE_GRID_SIZE * _worldScaleForZoom * 0.65;   // Fog fully opaque near edge of grid
+                    const fogNear = TILE_GRID_SIZE * _worldScaleForZoom * 0.25;
+                    const fogFar = TILE_GRID_SIZE * _worldScaleForZoom * 0.65;  
                     scene.fog = new THREE.Fog(getComputedStyle(document.documentElement).getPropertyValue('--sky-color'), fogNear, fogFar);
 
-
-                    camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, fogFar * 1.5); // Adjust far plane based on fog
+                    camera = new THREE.PerspectiveCamera(60, canvasContainer.clientWidth / canvasContainer.clientHeight, 1, fogFar * 1.5); 
                     camera.position.set(0, 1500, 1500); 
                     
                     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -127,7 +130,7 @@
                     controls.enableDamping = true;
                     controls.dampingFactor = 0.05;
                     controls.minDistance = 100; 
-                    controls.maxDistance = fogFar * 0.9; // Don't allow zooming too far into the fog
+                    controls.maxDistance = fogFar * 0.9; 
                     controls.maxPolarAngle = Math.PI / 2.05; 
                     
                     const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); 
@@ -137,9 +140,9 @@
                     directionalLight.castShadow = true;
                     directionalLight.shadow.mapSize.width = 2048; 
                     directionalLight.shadow.mapSize.height = 2048;
-                    const shadowCamSize = fogFar * 0.5; // Shadow camera should cover visible area
+                    const shadowCamSize = fogFar * 0.5; 
                     directionalLight.shadow.camera.near = 200;
-                    directionalLight.shadow.camera.far = 6000; // Can be larger
+                    directionalLight.shadow.camera.far = 6000; 
                     directionalLight.shadow.camera.left = -shadowCamSize;
                     directionalLight.shadow.camera.right = shadowCamSize;
                     directionalLight.shadow.camera.top = shadowCamSize;
@@ -153,7 +156,7 @@
                 }
 
                 async function loadMapAndBuildings() { 
-                    appLoaderText.textContent = 'Loading terrain (AWS) & map tiles (Zoom ' + TILE_ZOOM + ')...';
+                    appLoaderText.textContent = 'Loading terrain & map tiles (Zoom ' + TILE_ZOOM + ')...';
                     await loadTerrainAndMapTiles(); 
                     appLoaderText.textContent = 'Loading buildings...';
                     await loadBuildings(); 
@@ -164,8 +167,8 @@
                     const tilePromises = [];
                     for (let i = -halfGrid; i <= halfGrid; i++) {
                         for (let j = -halfGrid; j <= halfGrid; j++) {
-                            const tileX = _centerTileX + i; // Use pre-calculated _centerTileX
-                            const tileY = _centerTileY + j; // Use pre-calculated _centerTileY
+                            const tileX = _centerTileX + i; 
+                            const tileY = _centerTileY + j; 
                             tilePromises.push(createTile(tileX, tileY, TILE_ZOOM));
                         }
                     }
@@ -180,32 +183,72 @@
 
                     if (loadedTerrainCount === 0 && expectedTileCount > 0) {
                         appLoaderText.textContent = 'Error: Failed to load ANY AWS terrain data. Map will be flat. Check console.';
-                        console.error("CRITICAL: No AWS terrain data loaded. Check network connectivity and S3 access.");
                     } else if (loadedTerrainCount < expectedTileCount) {
                          appLoaderText.textContent = `Warning: ${expectedTileCount - loadedTerrainCount} AWS terrain tiles failed. Parts of map may be flat.`;
-                         console.warn(`${expectedTileCount - loadedTerrainCount} AWS terrain tiles failed to load. Check console for individual errors.`);
-                    } else {
-                        console.log("All expected AWS terrain tiles processed (either loaded successfully or failed and handled).");
                     }
                 }
                 
-                async function createTile(x, y, z) { 
-                    const worldSize = tileToWorldSize(z);
-                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64); // Increased segments
+                async function createTile(baseTileX, baseTileY, baseZoom) { 
+                    const worldSize = tileToWorldSize(baseZoom);
+                    const planeGeom = new THREE.PlaneGeometry(worldSize, worldSize, 64, 64); 
                     
-                    const mapUrl = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
-                    
-                    let mapTexture;
-                    try {
-                        mapTexture = await textureLoader.loadAsync(mapUrl);
-                        mapTexture.encoding = THREE.sRGBEncoding;
-                    } catch (e) {
-                        console.error(`MAP TEXTURE Load Error for tile ${x},${y} (${mapUrl}):`, e.message || e);
-                        mapTexture = new THREE.Texture(); 
+                    // --- Create Composite Visual Map Texture ---
+                    const visualZoom = baseZoom + VISUAL_TILE_ZOOM_OFFSET;
+                    const subTileCount = VISUAL_TILE_SUBDIVISIONS; // e.g., 2 if offset is 1 (2x2 grid)
+                    const singleSubTileImageSize = 256; // Assuming OSM tiles are 256x256
+                    const compositeCanvas = document.createElement('canvas');
+                    compositeCanvas.width = singleSubTileImageSize * subTileCount;
+                    compositeCanvas.height = singleSubTileImageSize * subTileCount;
+                    const ctx = compositeCanvas.getContext('2d');
+                    if (!ctx) {
+                        console.error("Failed to get 2D context for composite map tile");
+                        // Fallback to a single, lower-res tile? Or just error? For now, proceed with blank.
                     }
 
+                    const imagePromises = [];
+                    const startSubTileX = baseTileX * subTileCount;
+                    const startSubTileY = baseTileY * subTileCount;
+
+                    for (let dy = 0; dy < subTileCount; dy++) {
+                        for (let dx = 0; dx < subTileCount; dx++) {
+                            const subTileVisualX = startSubTileX + dx;
+                            const subTileVisualY = startSubTileY + dy;
+                            const mapUrl = `https://tile.openstreetmap.org/${visualZoom}/${subTileVisualX}/${subTileVisualY}.png`;
+                            
+                            imagePromises.push(
+                                textureLoader.loadAsync(mapUrl).then(texture => {
+                                    if (ctx && texture.image) {
+                                        ctx.drawImage(texture.image, dx * singleSubTileImageSize, dy * singleSubTileImageSize, singleSubTileImageSize, singleSubTileImageSize);
+                                    }
+                                }).catch(err => {
+                                    console.warn(`Failed to load visual sub-tile ${mapUrl}:`, err.message || err);
+                                    // Optionally draw a placeholder for failed sub-tiles on the canvas
+                                    if(ctx) {
+                                        ctx.fillStyle = '#cccccc'; // Light grey placeholder
+                                        ctx.fillRect(dx * singleSubTileImageSize, dy * singleSubTileImageSize, singleSubTileImageSize, singleSubTileImageSize);
+                                        ctx.fillStyle = '#000000';
+                                        ctx.fillText("Error", dx * singleSubTileImageSize + 10, dy * singleSubTileImageSize + 20);
+                                    }
+                                })
+                            );
+                        }
+                    }
+
+                    let compositeMapTexture;
+                    try {
+                        await Promise.all(imagePromises);
+                        compositeMapTexture = new THREE.CanvasTexture(compositeCanvas);
+                        compositeMapTexture.encoding = THREE.sRGBEncoding;
+                        compositeMapTexture.needsUpdate = true; // Ensure canvas content is uploaded
+                    } catch (e) { // Should be caught by individual promises, but as a fallback
+                        console.error(`Error creating composite map texture for base tile ${baseTileX},${baseTileY}:`, e.message || e);
+                        compositeMapTexture = new THREE.Texture(); // Fallback to empty texture
+                    }
+                    // --- End Composite Visual Map Texture ---
+
+
                     const planeMat = new THREE.MeshStandardMaterial({ 
-                        map: mapTexture, 
+                        map: compositeMapTexture, 
                         roughness: 0.9, 
                         metalness: 0.1
                     });
@@ -215,21 +258,20 @@
                     plane.receiveShadow = true; 
                     scene.add(plane);
                     
-                    const tilePos = tileToWorld(x, y, z); 
+                    const tilePos = tileToWorld(baseTileX, baseTileY, baseZoom); 
                     plane.position.x = tilePos.x;
                     plane.position.z = tilePos.z;
                     
-                    const terrainUrl = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`; 
+                    const terrainUrl = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${baseZoom}/${baseTileX}/${baseTileY}.png`; 
 
                     try {
                         const terrainData = await getTerrainData(terrainUrl); 
                         
                         if (!terrainData || terrainData.width === 0 || terrainData.height === 0) {
-                            console.warn(`Tile ${x},${y}: Invalid or empty AWS terrain data received after load attempt (${terrainUrl}). Skipping height modification.`);
-                            terrainTiles[`${x},${y}`] = null; 
+                            terrainTiles[`${baseTileX},${baseTileY}`] = null; 
                             return; 
                         }
-                        terrainTiles[`${x},${y}`] = terrainData; 
+                        terrainTiles[`${baseTileX},${baseTileY}`] = terrainData; 
 
                         const positions = planeGeom.attributes.position;
                         for (let i_vertex = 0; i_vertex < positions.count; i_vertex++) { 
@@ -243,10 +285,10 @@
                             positions.setZ(i_vertex, height_val); 
                         }
                         positions.needsUpdate = true;
-                        planeGeom.computeVertexNormals(); // Crucial for lighting on modified geometry
+                        planeGeom.computeVertexNormals(); 
                     } catch (error) {
-                        console.error(`AWS TERRAIN Data Error for tile ${x},${y} (${terrainUrl}):`, error.message || error);
-                        terrainTiles[`${x},${y}`] = null; 
+                        console.error(`AWS TERRAIN Data Error for tile ${baseTileX},${baseTileY} (${terrainUrl}):`, error.message || error);
+                        terrainTiles[`${baseTileX},${baseTileY}`] = null; 
                     }
                 }
 
@@ -256,12 +298,12 @@
                         if (!response.ok) throw new Error(`HTTP ${response.status} fetching prague_buildings.geojson`);
                         const geojson = await response.json();
                         
-                        appLoaderText.textContent = `Processing ${geojson.features.length} buildings... This may take a moment.`;
+                        appLoaderText.textContent = `Processing ${geojson.features.length} buildings...`;
                         await new Promise(resolve => setTimeout(resolve, 50)); 
                         
                         processGeoJson(geojson);
                     } catch (error) {
-                        appLoaderText.textContent = `Error loading buildings: ${error.message}. Buildings may not appear.`;
+                        appLoaderText.textContent = `Error loading buildings: ${error.message}.`;
                         console.error("Building load error:", error);
                     }
                 }
@@ -297,7 +339,7 @@
                              if(loadedTerrainCount > 0 || expectedTileCount === 0) { 
                                 loaderEl.style.display = 'none'; 
                              } else {
-                                appLoaderText.textContent = `Finished buildings, but AWS terrain failed. Check console.`;
+                                appLoaderText.textContent = `Finished buildings, but terrain failed. Check console.`;
                              }
                             console.log("Finished processing all buildings.");
                         }
@@ -306,12 +348,7 @@
                         requestAnimationFrame(() => processBatch(0)); 
                     } else {
                         console.log("No buildings found in GeoJSON to process.");
-                        const loadedTerrainCount = Object.values(terrainTiles).filter(data => data !== null).length;
-                        if (loadedTerrainCount > 0 || (TILE_GRID_SIZE * TILE_GRID_SIZE) === 0) {
-                           loaderEl.style.display = 'none';
-                        } else {
-                           appLoaderText.textContent = `No buildings, and AWS terrain failed. Check console.`;
-                        }
+                        loaderEl.style.display = 'none';
                     }
                 }
                 
@@ -425,8 +462,6 @@
                 function lon2tile(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); }
                 function lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));}
                 
-                // _centerTileX, _centerTileY, _worldScaleForZoom are now defined in init() after TILE_ZOOM
-
                 function lonLatToWorld(lon, lat) {
                     const tileXRelative = ((lon + 180) / 360 * Math.pow(2, TILE_ZOOM)) - _centerTileX;
                     const tileYRelative = ((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, TILE_ZOOM)) - _centerTileY;
@@ -447,7 +482,7 @@
                 async function getTerrainData(url) {
                     const image = await textureLoader.loadAsync(url); 
                     if (!image.image || image.image.width === 0 || image.image.height === 0) { 
-                        throw new Error(`Loaded image for terrain is invalid or has no dimensions: ${url}. (Width: ${image.image?.width}, Height: ${image.image?.height})`);
+                        throw new Error(`Loaded image for terrain is invalid or has no dimensions: ${url}.`);
                     }
                     const canvas = document.createElement('canvas');
                     canvas.width = image.image.width; 
@@ -487,8 +522,8 @@
                     let u_norm = (worldX - (tileX - _centerTileX) * _worldScaleForZoom) / _worldScaleForZoom; 
                     let v_norm = (worldZ - (tileY - _centerTileY) * _worldScaleForZoom) / _worldScaleForZoom; 
 
-                    u_norm = Math.max(0, Math.min(u_norm, 0.9999999)); // Clamp u to prevent 1.0
-                    v_norm = Math.max(0, Math.min(v_norm, 0.9999999)); // Clamp v to prevent 1.0
+                    u_norm = Math.max(0, Math.min(u_norm, 0.9999999)); 
+                    v_norm = Math.max(0, Math.min(v_norm, 0.9999999)); 
 
                     return sampleTerrain(data, u_norm, v_norm);
                 }
@@ -505,7 +540,7 @@
                 }
                 
                 function onLocationClick(event) { 
-                    console.log("Location clicked:", event.target.textContent); // DEBUG
+                    console.log("Location clicked:", event.target.textContent); 
                     document.querySelectorAll('#locations-list li').forEach(item => item.classList.remove('active')); 
                     event.target.classList.add('active'); 
                     const destination = destinations[event.target.dataset.index]; 
@@ -513,16 +548,16 @@
                 }
                 
                 function flyTo(destination) {
-                    console.log("Flying to:", destination.name, destination.lat, destination.lon); // DEBUG
+                    console.log("Flying to:", destination.name, destination.lat, destination.lon); 
                     const targetWorldPos = lonLatToWorld(destination.lon, destination.lat);
-                    console.log("Target World Pos:", targetWorldPos); // DEBUG
+                    console.log("Target World Pos:", targetWorldPos); 
                     if (isNaN(targetWorldPos.x) || isNaN(targetWorldPos.z)) {
                         console.error("Cannot fly to destination, invalid coordinates from lonLatToWorld:", destination);
                         return;
                     }
 
                     const targetHeight = getHeightAtPoint(targetWorldPos.x, targetWorldPos.z);
-                    console.log("Target Height at world pos:", targetHeight); // DEBUG
+                    console.log("Target Height at world pos:", targetHeight); 
                     
                     const cameraYOffset = TILE_ZOOM <= 14 ? 400 : 200; 
                     const cameraZOffset = TILE_ZOOM <= 14 ? 600 : 300; 
@@ -530,8 +565,9 @@
                     const cameraTargetY = isNaN(targetHeight) ? cameraYOffset : targetHeight + cameraYOffset; 
                     
                     const cameraTargetPos = { x: targetWorldPos.x, y: cameraTargetY, z: targetWorldPos.z + cameraZOffset };
-                    console.log("Camera Target Pos:", cameraTargetPos); // DEBUG
-                    console.log("Controls Target:", {x: targetWorldPos.x, y: (isNaN(targetHeight) ? 0 : targetHeight), z: targetWorldPos.z }); // DEBUG
+                    console.log("Camera Target Pos:", cameraTargetPos); 
+                    const controlsTargetPos = { x: targetWorldPos.x, y: (isNaN(targetHeight) ? 0 : targetHeight), z: targetWorldPos.z };
+                    console.log("Controls Target:", controlsTargetPos ); 
                     
                     if (!activeMarker) { 
                         const markerHeight = TILE_ZOOM <= 14 ? 60 : 40;
@@ -548,15 +584,18 @@
                     const markerYPos = isNaN(targetHeight) ? activeMarker.geometry.parameters.height / 2 : targetHeight + activeMarker.geometry.parameters.height / 2; 
                     activeMarker.position.set(targetWorldPos.x, markerYPos, targetWorldPos.z);
                     activeMarker.visible = true; 
-                    console.log("Marker Position:", activeMarker.position); // DEBUG
+                    console.log("Marker Position:", activeMarker.position); 
                     
+                    // Stop any existing tweens on camera and controls
+                    TWEEN.removeAll(); 
+
                     new TWEEN.Tween(camera.position)
                         .to(cameraTargetPos, 2000)
                         .easing(TWEEN.Easing.Quadratic.InOut)
-                        .onUpdate(() => controls.update()) // Ensure controls are updated during tween
+                        // .onUpdate(() => controls.update()) // Not strictly necessary if controls.update() is in animate loop
                         .start(); 
                     new TWEEN.Tween(controls.target)
-                        .to({ x: targetWorldPos.x, y: (isNaN(targetHeight) ? 0 : targetHeight), z: targetWorldPos.z }, 2000)
+                        .to(controlsTargetPos, 2000)
                         .easing(TWEEN.Easing.Quadratic.InOut)
                         .start(); 
                 }
@@ -570,7 +609,7 @@
                 function animate() { 
                     requestAnimationFrame(animate); 
                     TWEEN.update(); 
-                    controls.update(); // OrbitControls update
+                    controls.update(); 
                     renderer.render(scene, camera); 
                 }
                 
